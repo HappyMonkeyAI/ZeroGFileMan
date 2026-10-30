@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+*.log
+.env
+MCP.local.md
+.agent-manifest.json
+.agent-status.md
+.agent-tasks.json
+.tmp/
+.release-*
+*.local
+.DS_Store
+Thumbs.db
