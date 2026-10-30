@@ -34,6 +34,8 @@ export interface SpeechSettings {
 
 export type OpenWithApp = 'default' | 'notepad' | 'cursor' | 'explorer' | 'terminal';
 
+export type MenuCommand = string;
+
 export interface FileManApi {
   listLocalDirectory(path?: string): Promise<DirectoryListing>;
   searchLocalShallow(path: string, maxDepth?: number): Promise<SearchHit[]>;
@@ -47,6 +49,7 @@ export interface FileManApi {
   openPath(path: string): Promise<void>;
   showItemInFolder(path: string): Promise<void>;
   openWith(path: string, app: OpenWithApp | string): Promise<void>;
+  onMenuCommand(callback: (command: MenuCommand) => void): () => void;
 }
 
 declare global {

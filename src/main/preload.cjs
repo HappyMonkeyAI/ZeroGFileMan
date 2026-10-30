@@ -12,5 +12,10 @@ contextBridge.exposeInMainWorld('fileman', {
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
   showItemInFolder: (path) => ipcRenderer.invoke('shell:showItem', path),
-  openWith: (path, app) => ipcRenderer.invoke('shell:openWith', path, app)
+  openWith: (path, app) => ipcRenderer.invoke('shell:openWith', path, app),
+  onMenuCommand: (callback) => {
+    const handler = (_event, command) => callback(command);
+    ipcRenderer.on('menu:command', handler);
+    return () => ipcRenderer.removeListener('menu:command', handler);
+  }
 });

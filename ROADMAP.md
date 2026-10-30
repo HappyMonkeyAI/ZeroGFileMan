@@ -6,6 +6,8 @@
 2. **Fuzzy navigate live** — depth-2 shallow index + Auto-nav toggle
 3. **CRUD** — mkdir, rename, delete (non-recursive), copy/cut/paste between panes
 4. **Action map** — open / Notepad / Cursor / terminal-here / copy path / reveal / refresh (+ clipboard verbs)
+4b. **Chrome** — native menu; icon toolbar; themes
+4c. **Pro Commander deck UI** — Stitch-inspired dark tokens, ACTIVE/TARGET panes, master toolbar, filter, transcript bus, status bar (`DESIGN.md`)
 
 ## Next
 

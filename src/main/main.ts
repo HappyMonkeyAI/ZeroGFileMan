@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installApplicationMenu } from './app-menu.js';
 import {
   copyLocalEntry,
   createLocalDirectory,
@@ -42,6 +43,8 @@ function createWindow(): void {
     void mainWindow.loadURL(url);
   }
 }
+
+installApplicationMenu(() => mainWindow);
 
 function asKind(value: unknown): FileEntry['kind'] {
   if (value === 'directory' || value === 'symlink' || value === 'file') return value;
