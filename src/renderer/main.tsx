@@ -21,10 +21,17 @@ import {
   type HistoryState
 } from '../shared/pane-history.js';
 import { isFavoritePath, type Favorite } from '../shared/favorites.js';
-import type { FileEntry, SpeechSettings, VoiceMode } from '../shared/types.js';
+import type { FileEntry, SpeechApiKeyStatus, SpeechSettings, VoiceMode } from '../shared/types.js';
 import { Icon } from './icons.js';
-import { DEFAULT_SPEECH, SpeechClient, type SpeechWorker } from './speech.js';
-import { describeDownload, SPEECH_MODELS } from './speech-models.js';
+import { SpeechClient, type SpeechWorker } from './speech.js';
+import {
+  describeDownload,
+  SPEECH_LANGUAGES,
+  SPEECH_MODELS,
+  SPEECH_PRECISIONS,
+  supportsLanguageSelection
+} from './speech-models.js';
+import { loadStoredSpeechSettings, storeSpeechSettings } from './speech-settings.js';
 import {
   applyTheme,
   isThemeId,
@@ -39,7 +46,8 @@ const speech = new SpeechClient({
   createWorker: () =>
     new Worker(new URL('./voice-worker.ts', import.meta.url), {
       type: 'module'
-    }) as unknown as SpeechWorker
+    }) as unknown as SpeechWorker,
+  resolveApiKey: () => window.fileman.readSpeechApiKey()
 });
 
 type PaneState = {
@@ -691,7 +699,14 @@ function App() {
   const [theme, setTheme] = useState<ThemeId>(() => loadStoredTheme());
   const [jumpQuery, setJumpQuery] = useState('');
   const [demoText, setDemoText] = useState('zerogfileman');
-  const [speechSettings, setSpeechSettings] = useState<SpeechSettings>(DEFAULT_SPEECH);
+  const [speechSettings, setSpeechSettings] = useState<SpeechSettings>(() => loadStoredSpeechSettings());
+  const [speechSettingsOpen, setSpeechSettingsOpen] = useState(false);
+  const [speechKeyDraft, setSpeechKeyDraft] = useState('');
+  const [speechKeyStatus, setSpeechKeyStatus] = useState<SpeechApiKeyStatus>({
+    stored: false,
+    encryptionAvailable: true,
+    sessionOnly: false
+  });
   const [clipboard, setClipboard] = useState<FileClip | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [log, setLog] = useState<string[]>([`[${stamp()}] ZeroG FileMan ready · dual commander`]);
@@ -703,10 +718,25 @@ function App() {
     setLog((prev) => [...prev.slice(-40), message]);
   }, []);
 
+  const updateSpeech = useCallback((patch: Partial<SpeechSettings>) => {
+    setSpeechSettings((prev) => {
+      const next = { ...prev, ...patch };
+      storeSpeechSettings(next);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     applyTheme(theme);
     storeTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    void api()
+      .speechApiKeyStatus()
+      .then(setSpeechKeyStatus)
+      .catch(() => undefined);
+  }, []);
 
   const cmds = () => (active === 'left' ? leftCommands.current : rightCommands.current);
 
@@ -1194,7 +1224,7 @@ function App() {
         />
       </main>
 
-      <section className="transcript">
+      <section className={`transcript${speechSettingsOpen ? ' settings-open' : ''}`}>
         <div className="transcript-bar">
           <span>
             <strong>TRANSCRIPT & ACTION BUS</strong>
@@ -1202,14 +1232,194 @@ function App() {
             fuzzy: depth-2
             <span style={{ margin: '0 8px', color: 'var(--divider)' }}>·</span>
             engine: {speechSettings.engine}
+            {speechKeyStatus.stored ? (
+              <>
+                <span style={{ margin: '0 8px', color: 'var(--divider)' }}>·</span>
+                key: {speechKeyStatus.sessionOnly ? 'session' : 'stored'}
+              </>
+            ) : null}
           </span>
           <span>
+            <button
+              type="button"
+              className="speech-gear"
+              title="Speech settings"
+              aria-expanded={speechSettingsOpen}
+              onClick={() => setSpeechSettingsOpen((v) => !v)}
+            >
+              <Icon name="info" /> Speech
+            </button>
             <span className="kbd">Tab</span> pane · <span className="kbd">Ctrl+K</span> jump ·{' '}
-            <span className="kbd">Ctrl+D</span> fav · <span className="kbd">F5/F6</span> copy/move→
+            <span className="kbd">F5/F6</span> copy/move→
           </span>
         </div>
+        {speechSettingsOpen ? (
+          <div className="speech-settings">
+            <label>
+              Engine
+              <select
+                value={speechSettings.engine}
+                onChange={(e) => updateSpeech({ engine: e.target.value as SpeechSettings['engine'] })}
+              >
+                <option value="demo">Demo</option>
+                <option value="builtin">Builtin Whisper</option>
+                <option value="server">Server ASR</option>
+              </select>
+            </label>
+            <label>
+              Model
+              <select
+                value={speechSettings.model}
+                disabled={speechSettings.engine !== 'builtin'}
+                title={describeDownload(speechSettings.model, speechSettings.precision)}
+                onChange={(e) => updateSpeech({ model: e.target.value })}
+              >
+                {SPEECH_MODELS.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Precision
+              <select
+                value={speechSettings.precision}
+                disabled={speechSettings.engine !== 'builtin'}
+                onChange={(e) =>
+                  updateSpeech({ precision: e.target.value as SpeechSettings['precision'] })
+                }
+              >
+                {SPEECH_PRECISIONS.map((p) => (
+                  <option key={p.value} value={p.value} title={p.detail}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Device
+              <select
+                value={speechSettings.device}
+                disabled={speechSettings.engine !== 'builtin'}
+                onChange={(e) => updateSpeech({ device: e.target.value as SpeechSettings['device'] })}
+              >
+                <option value="wasm">WASM (CPU)</option>
+                <option value="webgpu">WebGPU</option>
+              </select>
+            </label>
+            <label>
+              Language
+              <select
+                value={speechSettings.language}
+                disabled={
+                  speechSettings.engine === 'demo' ||
+                  (speechSettings.engine === 'builtin' && !supportsLanguageSelection(speechSettings.model))
+                }
+                onChange={(e) => updateSpeech({ language: e.target.value })}
+              >
+                {SPEECH_LANGUAGES.map((lang) => (
+                  <option key={lang.value} value={lang.value}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Silence RMS
+              <input
+                type="number"
+                min={0}
+                max={0.1}
+                step={0.001}
+                value={speechSettings.silenceRmsThreshold}
+                onChange={(e) => updateSpeech({ silenceRmsThreshold: Number(e.target.value) })}
+              />
+            </label>
+            <label>
+              Max sec
+              <input
+                type="number"
+                min={3}
+                max={120}
+                step={1}
+                value={speechSettings.maxUtteranceSeconds}
+                onChange={(e) => updateSpeech({ maxUtteranceSeconds: Number(e.target.value) })}
+              />
+            </label>
+            <label className="speech-span-2">
+              Server URL
+              <input
+                value={speechSettings.serverUrl}
+                disabled={speechSettings.engine !== 'server'}
+                onChange={(e) => updateSpeech({ serverUrl: e.target.value })}
+                placeholder="http://127.0.0.1:8080/v1/audio/transcriptions"
+              />
+            </label>
+            <label>
+              Server model
+              <input
+                value={speechSettings.serverModel}
+                disabled={speechSettings.engine !== 'server'}
+                onChange={(e) => updateSpeech({ serverModel: e.target.value })}
+              />
+            </label>
+            <label className="speech-span-2">
+              API key {speechKeyStatus.encryptionAvailable ? '(safeStorage)' : '(session only)'}
+              <div className="speech-key-row">
+                <input
+                  type="password"
+                  value={speechKeyDraft}
+                  disabled={speechSettings.engine !== 'server'}
+                  placeholder={speechKeyStatus.stored ? '•••••••• (saved)' : 'Optional Bearer token'}
+                  onChange={(e) => setSpeechKeyDraft(e.target.value)}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className="fav-add"
+                  disabled={speechSettings.engine !== 'server' || !speechKeyDraft.trim()}
+                  onClick={() => {
+                    void api()
+                      .saveSpeechApiKey(speechKeyDraft)
+                      .then((status) => {
+                        setSpeechKeyStatus(status);
+                        setSpeechKeyDraft('');
+                        pushLog(
+                          `[${stamp()}] speech API key ${status.sessionOnly ? 'held for session' : 'stored'}`
+                        );
+                      })
+                      .catch((error) =>
+                        pushLog(error instanceof Error ? error.message : String(error))
+                      );
+                  }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="fav-add"
+                  disabled={speechSettings.engine !== 'server' || !speechKeyStatus.stored}
+                  onClick={() => {
+                    void api()
+                      .clearSpeechApiKey()
+                      .then((status) => {
+                        setSpeechKeyStatus(status);
+                        pushLog(`[${stamp()}] speech API key cleared`);
+                      })
+                      .catch((error) =>
+                        pushLog(error instanceof Error ? error.message : String(error))
+                      );
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </label>
+          </div>
+        ) : null}
         <div className="transcript-log">
-          {log.slice(-6).map((line, i) => (
+          {log.slice(speechSettingsOpen ? -3 : -6).map((line, i) => (
             <div key={`${i}-${line}`} className={line.includes('→') || line.includes('navigate') ? 'line-accent' : undefined}>
               {line}
             </div>
@@ -1218,9 +1428,7 @@ function App() {
         <div className="transcript-input">
           <select
             value={speechSettings.engine}
-            onChange={(e) =>
-              setSpeechSettings({ ...speechSettings, engine: e.target.value as SpeechSettings['engine'] })
-            }
+            onChange={(e) => updateSpeech({ engine: e.target.value as SpeechSettings['engine'] })}
             aria-label="Speech engine"
           >
             <option value="demo">Demo</option>
@@ -1230,7 +1438,7 @@ function App() {
           {speechSettings.engine === 'builtin' ? (
             <select
               value={speechSettings.model}
-              onChange={(e) => setSpeechSettings({ ...speechSettings, model: e.target.value })}
+              onChange={(e) => updateSpeech({ model: e.target.value })}
               aria-label="Whisper model"
               title={describeDownload(speechSettings.model, speechSettings.precision)}
             >

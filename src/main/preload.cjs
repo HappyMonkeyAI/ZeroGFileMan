@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('fileman', {
   openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
   showItemInFolder: (path) => ipcRenderer.invoke('shell:showItem', path),
   openWith: (path, app) => ipcRenderer.invoke('shell:openWith', path, app),
+  speechApiKeyStatus: () => ipcRenderer.invoke('speechKey:status'),
+  saveSpeechApiKey: (key) => ipcRenderer.invoke('speechKey:save', key),
+  clearSpeechApiKey: () => ipcRenderer.invoke('speechKey:clear'),
+  readSpeechApiKey: () => ipcRenderer.invoke('speechKey:read'),
   onMenuCommand: (callback) => {
     const handler = (_event, command) => callback(command);
     ipcRenderer.on('menu:command', handler);

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, safeStorage, session, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -16,10 +16,27 @@ import {
   resolveLocalPath,
   searchLocalShallow
 } from './local-fs.js';
-import type { FileEntry } from '../shared/types.js';
+import { defaultSecretsPath, SecretStore, SPEECH_API_KEY } from './secret-store.js';
+import type { FileEntry, SpeechApiKeyStatus } from '../shared/types.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 let mainWindow: BrowserWindow | undefined;
+
+const secrets = new SecretStore({
+  filePath: defaultSecretsPath(app.getPath('userData')),
+  crypto: safeStorage
+});
+/** Fallback when safeStorage encryption is unavailable — never written to disk. */
+let sessionSpeechKey: string | null = null;
+
+async function speechKeyStatus(): Promise<SpeechApiKeyStatus> {
+  const stored = (await secrets.has(SPEECH_API_KEY)) || Boolean(sessionSpeechKey);
+  return {
+    stored,
+    encryptionAvailable: secrets.encryptionAvailable(),
+    sessionOnly: Boolean(sessionSpeechKey) && !(await secrets.has(SPEECH_API_KEY))
+  };
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -123,7 +140,36 @@ ipcMain.handle('shell:openWith', async (_e, path: unknown, appName: unknown) => 
   if (err) throw new Error(err);
 });
 
-app.whenReady().then(createWindow);
+ipcMain.handle('speechKey:status', () => speechKeyStatus());
+ipcMain.handle('speechKey:save', async (_event, key: unknown) => {
+  const value = typeof key === 'string' ? key.trim() : '';
+  if (!value) {
+    sessionSpeechKey = null;
+    await secrets.clear(SPEECH_API_KEY);
+    return speechKeyStatus();
+  }
+  if (secrets.encryptionAvailable()) {
+    sessionSpeechKey = null;
+    await secrets.set(SPEECH_API_KEY, value);
+  } else {
+    // Refuse silent plaintext on disk; keep in-memory for this session only.
+    sessionSpeechKey = value;
+  }
+  return speechKeyStatus();
+});
+ipcMain.handle('speechKey:clear', async () => {
+  sessionSpeechKey = null;
+  await secrets.clear(SPEECH_API_KEY);
+  return speechKeyStatus();
+});
+ipcMain.handle('speechKey:read', async () => (await secrets.get(SPEECH_API_KEY)) ?? sessionSpeechKey);
+
+app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === 'media');
+  });
+  createWindow();
+});
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });

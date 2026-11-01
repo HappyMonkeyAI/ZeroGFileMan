@@ -2,26 +2,20 @@
 
 ## Current
 
-P2.1 builtin Whisper worker landed; next is speech settings polish / packaging.
+P2.2 speech settings + safeStorage API key done; P2.3 jewel polish / packaging next.
 
 ## Delivered
 
-- Dual-pane MVP + Pro Commander deck UI + favorites + Ctrl+K jump
-- History + F5/F6 copy/move (ADR-0004)
-- Builtin Whisper via Transformers.js module worker (`voice-worker.ts`); engines: demo / builtin / server
-
-## SPEC smoke (P0.2) — code/build evidence 2026-11-01
-
-| ID | Result | Evidence |
-|----|--------|----------|
-| M1–M10 | pass | see prior notes; M9 favorites done |
-| Voice | pass | SpeechClient tests + builtin engine option |
+- Dual-pane commander + favorites + Ctrl+K jump + history + F5/F6
+- Builtin Whisper worker (demo / builtin / server)
+- Speech settings panel: model, precision, device, language, silence, max sec, server URL/model
+- Speech API key via Electron `safeStorage` (session-only fallback if encryption unavailable)
 
 ## Next
 
-- P2.2 Speech settings UI (precision/device/API key in safeStorage)
+- P2.3 Jewel UX polish
 - P4.1 electron-builder / P3.1 layouts
 
 ## Blockers
 
-None. First builtin transcription downloads the selected HF model (~41 MB for tiny.en q8).
+None.

@@ -49,6 +49,13 @@ export type OpenWithApp = 'default' | 'notepad' | 'cursor' | 'explorer' | 'termi
 
 export type MenuCommand = string;
 
+export type SpeechApiKeyStatus = {
+  stored: boolean;
+  encryptionAvailable: boolean;
+  /** True when the key is held only in main-process memory this session. */
+  sessionOnly: boolean;
+};
+
 export interface FileManApi {
   listLocalDirectory(path?: string): Promise<DirectoryListing>;
   searchLocalShallow(path: string, maxDepth?: number): Promise<SearchHit[]>;
@@ -65,6 +72,10 @@ export interface FileManApi {
   openPath(path: string): Promise<void>;
   showItemInFolder(path: string): Promise<void>;
   openWith(path: string, app: OpenWithApp | string): Promise<void>;
+  speechApiKeyStatus(): Promise<SpeechApiKeyStatus>;
+  saveSpeechApiKey(key: string): Promise<SpeechApiKeyStatus>;
+  clearSpeechApiKey(): Promise<SpeechApiKeyStatus>;
+  readSpeechApiKey(): Promise<string | null>;
   onMenuCommand(callback: (command: MenuCommand) => void): () => void;
 }
 
