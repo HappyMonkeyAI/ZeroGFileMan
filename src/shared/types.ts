@@ -25,10 +25,19 @@ export interface SearchHit {
 
 export type VoiceMode = 'navigate' | 'action';
 
-export type SpeechEngine = 'demo' | 'server';
+export type SpeechEngine = 'demo' | 'builtin' | 'server';
+
+export type SpeechPrecision = 'q4' | 'q8' | 'fp16' | 'fp32';
+
+export type SpeechTask = 'transcribe' | 'translate';
 
 export interface SpeechSettings {
   engine: SpeechEngine;
+  /** Hugging Face hub id for the builtin Whisper pipeline. */
+  model: string;
+  precision: SpeechPrecision;
+  device: 'wasm' | 'webgpu';
+  task: SpeechTask;
   serverUrl: string;
   serverModel: string;
   language: string;

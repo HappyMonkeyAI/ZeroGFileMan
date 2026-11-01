@@ -25,6 +25,7 @@
     "ci": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
@@ -43,9 +44,19 @@
     "appId": "com.happymonkeyai.zerogfileman",
     "productName": "ZeroG FileMan",
     "asar": true,
-    "files": ["dist/**/*", "package.json"],
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
     "win": {
-      "target": [{ "target": "portable", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "signAndEditExecutable": false
     }
   }

@@ -10,10 +10,16 @@ Cloud ASR adds latency and privacy risk. Term already supports builtin Whisper (
 
 ## Decision
 
-v1 scaffold: **demo typed transcript** + optional **server ASR**. Builtin Whisper worker copied in a later ROADMAP slice. No cloud LLM in the file-operation path.
+Three engines:
+
+1. **demo** — typed transcript for UI/fuzzy testing without a mic or model
+2. **builtin** — Transformers.js Whisper in a module worker (`voice-worker.ts`), models from the Hugging Face hub, cached after first download
+3. **server** — OpenAI-compatible `/v1/audio/transcriptions` (optional Bearer key via main later)
+
+No cloud LLM in the file-operation path. Voice remains optional for every core action.
 
 ## Consequences
 
-- Scaffold works offline for UI/fuzzy testing
-- Server ASR reuses Term `speech-server` patterns
-- Builtin model download cost deferred until jewels prove useful
+- Offline Navigate/Action jewels work once a builtin model is cached
+- First builtin use downloads ~40 MB+ (tiny.en q8 default)
+- Server ASR reuses Term `speech-server` patterns for LAN / whisper.cpp hosts

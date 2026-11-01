@@ -23,7 +23,8 @@ import {
 import { isFavoritePath, type Favorite } from '../shared/favorites.js';
 import type { FileEntry, SpeechSettings, VoiceMode } from '../shared/types.js';
 import { Icon } from './icons.js';
-import { DEFAULT_SPEECH, SpeechClient } from './speech.js';
+import { DEFAULT_SPEECH, SpeechClient, type SpeechWorker } from './speech.js';
+import { describeDownload, SPEECH_MODELS } from './speech-models.js';
 import {
   applyTheme,
   isThemeId,
@@ -33,6 +34,13 @@ import {
 } from './themes.js';
 import { isMostlySilence, VoiceRecorder } from './voice.js';
 import './styles.css';
+
+const speech = new SpeechClient({
+  createWorker: () =>
+    new Worker(new URL('./voice-worker.ts', import.meta.url), {
+      type: 'module'
+    }) as unknown as SpeechWorker
+});
 
 type PaneState = {
   path: string;
@@ -79,8 +87,6 @@ type PaneCommands = {
 function historyOf(pane: PaneState): HistoryState {
   return { history: pane.history, historyIndex: pane.historyIndex };
 }
-
-const speech = new SpeechClient();
 
 function api() {
   return window.fileman;
@@ -456,8 +462,16 @@ function FilePane(props: {
           return;
         }
         try {
-          const result = await speech.transcribe(samples, speechSettings);
-          onLog(`[${stamp()}] ${mode}: “${result.text}”`);
+          onChange({ ...pane, listening: mode, status: `Transcribing (${speechSettings.engine})…` });
+          const result = await speech.transcribe(samples, speechSettings, (progress) => {
+            if (progress.kind === 'loading') {
+              const pct = progress.progress == null ? '…' : `${Math.round(progress.progress)}%`;
+              onChange({ ...pane, listening: mode, status: `Loading model ${pct}` });
+            } else {
+              onLog(`[${stamp()}] ${progress.message}`);
+            }
+          });
+          onLog(`[${stamp()}] ${mode}: “${result.text}” (${result.elapsedMs}ms · ${result.engine})`);
           if (mode === 'navigate') await applyNavigate(result.text);
           else await applyAction(result.text);
         } catch (error) {
@@ -1210,13 +1224,35 @@ function App() {
             aria-label="Speech engine"
           >
             <option value="demo">Demo</option>
+            <option value="builtin">Builtin Whisper</option>
             <option value="server">Server ASR</option>
           </select>
+          {speechSettings.engine === 'builtin' ? (
+            <select
+              value={speechSettings.model}
+              onChange={(e) => setSpeechSettings({ ...speechSettings, model: e.target.value })}
+              aria-label="Whisper model"
+              title={describeDownload(speechSettings.model, speechSettings.precision)}
+            >
+              {SPEECH_MODELS.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <input
             value={demoText}
             onChange={(e) => setDemoText(e.target.value)}
-            placeholder="Demo / voice transcript…"
+            placeholder={
+              speechSettings.engine === 'demo'
+                ? 'Demo transcript…'
+                : speechSettings.engine === 'builtin'
+                  ? 'Mic → local Whisper (first run downloads model)'
+                  : 'Mic → server ASR'
+            }
             aria-label="Demo transcript"
+            disabled={speechSettings.engine !== 'demo'}
           />
           <ToolButton icon="mic" label="Nav" title="Navigate jewel" onClick={() => cmds()?.voiceNavigate()} />
           <ToolButton icon="spark" label="Act" title="Action jewel" onClick={() => cmds()?.voiceAction()} />
