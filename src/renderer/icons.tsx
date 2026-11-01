@@ -129,6 +129,18 @@ export function Icon({ name, className = '' }: { name: string; className?: strin
           <path d="M9 5l7 7-7 7" />
         </svg>
       );
+    case 'chevron-up':
+      return (
+        <svg {...common}>
+          <path d="M5 15l7-7 7 7" />
+        </svg>
+      );
+    case 'chevron-down':
+      return (
+        <svg {...common}>
+          <path d="M5 9l7 7 7-7" />
+        </svg>
+      );
     case 'split-v':
       return (
         <svg {...common}>

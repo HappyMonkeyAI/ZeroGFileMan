@@ -37,10 +37,25 @@ describe('listing-view', () => {
 
 describe('listing-prefs', () => {
   it('parses stored prefs with fallbacks', () => {
-    expect(parseListingPrefs(null)).toEqual({ mode: 'details', scale: 1 });
+    const defaults = {
+      mode: 'details',
+      scale: 1,
+      sortKey: 'name',
+      sortDir: 'asc'
+    };
+    expect(parseListingPrefs(null)).toEqual({ left: defaults, right: defaults });
     expect(parseListingPrefs({ mode: 'thumbnails', scale: 1.4 })).toEqual({
-      mode: 'thumbnails',
-      scale: 1.4
+      left: { ...defaults, mode: 'thumbnails', scale: 1.4 },
+      right: { ...defaults, mode: 'thumbnails', scale: 1.4 }
+    });
+    expect(
+      parseListingPrefs({
+        left: { mode: 'icons', scale: 1.2, sortKey: 'size', sortDir: 'desc' },
+        right: { mode: 'details', scale: 1, sortKey: 'modified', sortDir: 'asc' }
+      })
+    ).toEqual({
+      left: { mode: 'icons', scale: 1.2, sortKey: 'size', sortDir: 'desc' },
+      right: { mode: 'details', scale: 1, sortKey: 'modified', sortDir: 'asc' }
     });
   });
 });

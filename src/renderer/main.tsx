@@ -38,12 +38,23 @@ import {
   type ListingViewMode
 } from '../shared/listing-view.js';
 import {
+  nextSortState,
+  sortEntriesBy,
+  type ListingSortDir,
+  type ListingSortKey
+} from '../shared/listing-sort.js';
+import {
   clampSplitRatio,
   setLayout,
   toggleMaximize,
   workspaceGridTemplate,
   type WorkspaceLayoutState
 } from '../shared/pane-layout.js';
+import {
+  clampTranscriptHeight,
+  effectiveTranscriptHeight,
+  type TranscriptDrawerState
+} from '../shared/transcript-drawer.js';
 import type {
   FileEntry,
   SpeechApiKeyStatus,
@@ -55,7 +66,7 @@ import type {
 import { shouldStopJewelOnRelease } from '../shared/voice-jewel.js';
 import { Icon } from './icons.js';
 import { loadStoredWorkspaceLayout, storeWorkspaceLayout } from './layout-prefs.js';
-import { loadStoredListingPrefs, storeListingPrefs } from './listing-prefs.js';
+import { loadStoredListingPrefs, storePaneListingPrefs } from './listing-prefs.js';
 import { SpeechClient, type SpeechWorker } from './speech.js';
 import {
   describeDownload,
@@ -73,6 +84,7 @@ import {
   storeTheme,
   type ThemeId
 } from './themes.js';
+import { loadStoredTranscriptDrawer, storeTranscriptDrawer } from './transcript-prefs.js';
 import { isMostlySilence, VoiceRecorder } from './voice.js';
 import './styles.css';
 
@@ -155,7 +167,18 @@ type PaneState = {
   historyIndex: number;
   viewMode: ListingViewMode;
   viewScale: number;
+  sortKey: ListingSortKey;
+  sortDir: ListingSortDir;
 };
+
+function persistListing(side: 'left' | 'right', pane: PaneState): void {
+  storePaneListingPrefs(side, {
+    mode: pane.viewMode,
+    scale: pane.viewScale,
+    sortKey: pane.sortKey,
+    sortDir: pane.sortDir
+  });
+}
 
 type FileClip = {
   mode: 'copy' | 'cut';
@@ -287,12 +310,13 @@ function FilePane(props: {
   const crumbs = useMemo(() => breadcrumbSegments(pane.path), [pane.path]);
   const visible = useMemo(() => {
     const q = pane.filter.trim().toLowerCase();
-    return pane.entries.filter((e) => {
+    const filtered = pane.entries.filter((e) => {
       if (!showHidden && isHiddenName(e.name)) return false;
       if (!q) return true;
       return e.name.toLowerCase().includes(q);
     });
-  }, [pane.entries, pane.filter, showHidden]);
+    return sortEntriesBy(filtered, pane.sortKey, pane.sortDir);
+  }, [pane.entries, pane.filter, pane.sortDir, pane.sortKey, showHidden]);
   const recorderRef = useRef<VoiceRecorder | null>(null);
   const pressRef = useRef<{ mode: VoiceMode; at: number; releaseWillStop: boolean } | null>(null);
   const pendingStartRef = useRef<Promise<boolean> | null>(null);
@@ -939,7 +963,7 @@ function FilePane(props: {
                 onClick={() => {
                   const next = { ...pane, viewMode: mode };
                   onChange(next);
-                  storeListingPrefs({ mode, scale: pane.viewScale });
+                  persistListing(side, next);
                 }}
               >
                 <Icon name={icon} />
@@ -950,9 +974,35 @@ function FilePane(props: {
       </div>
       {pane.viewMode === 'details' ? (
         <div className="entry-heading">
-          <span>Name</span>
-          <span style={{ textAlign: 'right' }}>Size</span>
-          <span style={{ textAlign: 'right' }}>Modified</span>
+          {(
+            [
+              ['name', 'Name', 'left'],
+              ['size', 'Size', 'right'],
+              ['modified', 'Modified', 'right']
+            ] as const
+          ).map(([key, label, align]) => {
+            const activeSort = pane.sortKey === key;
+            const marker = activeSort ? (pane.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+            return (
+              <button
+                key={key}
+                type="button"
+                className={`sort-head${activeSort ? ' active' : ''}`}
+                style={{ textAlign: align }}
+                aria-pressed={activeSort}
+                title={`Sort by ${label}`}
+                onClick={() => {
+                  const nextSort = nextSortState(pane.sortKey, pane.sortDir, key);
+                  const next = { ...pane, ...nextSort };
+                  onChange(next);
+                  persistListing(side, next);
+                }}
+              >
+                {label}
+                {marker}
+              </button>
+            );
+          })}
         </div>
       ) : null}
       <div
@@ -970,8 +1020,9 @@ function FilePane(props: {
           const nextScale = stepViewScale(pane.viewScale, event.deltaY < 0 ? 1 : -1);
           if (nextScale === pane.viewScale) return;
           const nextMode = pane.viewMode === 'details' ? 'icons' : pane.viewMode;
-          onChange({ ...pane, viewMode: nextMode, viewScale: nextScale });
-          storeListingPrefs({ mode: nextMode, scale: nextScale });
+          const next = { ...pane, viewMode: nextMode, viewScale: nextScale };
+          onChange(next);
+          persistListing(side, next);
         }}
       >
         <button
@@ -1105,16 +1156,31 @@ function App() {
   const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayoutState>(() =>
     loadStoredWorkspaceLayout()
   );
+  const [transcriptDrawer, setTranscriptDrawer] = useState<TranscriptDrawerState>(() =>
+    loadStoredTranscriptDrawer()
+  );
   const [log, setLog] = useState<string[]>([`[${stamp()}] ZeroG FileMan ready · dual commander`]);
   const leftCommands = useRef<PaneCommands | null>(null);
   const rightCommands = useRef<PaneCommands | null>(null);
   const jumpInputRef = useRef<HTMLInputElement | null>(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<{ start: number; ratio: number; vertical: boolean } | null>(null);
+  const transcriptResizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
   const updateWorkspaceLayout = useCallback((next: WorkspaceLayoutState) => {
     setWorkspaceLayout(next);
     storeWorkspaceLayout(next);
+  }, []);
+
+  const updateTranscriptDrawer = useCallback((patch: Partial<TranscriptDrawerState>) => {
+    setTranscriptDrawer((prev) => {
+      const next = {
+        collapsed: patch.collapsed ?? prev.collapsed,
+        height: clampTranscriptHeight(patch.height ?? prev.height)
+      };
+      storeTranscriptDrawer(next);
+      return next;
+    });
   }, []);
 
   const pushLog = useCallback((message: string) => {
@@ -1245,8 +1311,10 @@ function App() {
           status: l.path,
           listening: null,
           filter: '',
-          viewMode: listing.mode,
-          viewScale: listing.scale
+          viewMode: listing.left.mode,
+          viewScale: listing.left.scale,
+          sortKey: listing.left.sortKey,
+          sortDir: listing.left.sortDir
         });
         setRight({
           ...r,
@@ -1256,8 +1324,10 @@ function App() {
           status: r.path,
           listening: null,
           filter: '',
-          viewMode: listing.mode,
-          viewScale: listing.scale
+          viewMode: listing.right.mode,
+          viewScale: listing.right.scale,
+          sortKey: listing.right.sortKey,
+          sortDir: listing.right.sortDir
         });
         pushLog(`[${stamp()}] Panes: ${l.path} | ${r.path}`);
       } catch (error) {
@@ -1594,8 +1664,9 @@ function App() {
                 const setter = active === 'left' ? setLeft : setRight;
                 setter((prev) => {
                   if (!prev) return prev;
-                  storeListingPrefs({ mode: 'details', scale: prev.viewScale });
-                  return { ...prev, viewMode: 'details' };
+                  const next = { ...prev, viewMode: 'details' as const };
+                  persistListing(active, next);
+                  return next;
                 });
               }}
             />
@@ -1606,8 +1677,9 @@ function App() {
                 const setter = active === 'left' ? setLeft : setRight;
                 setter((prev) => {
                   if (!prev) return prev;
-                  storeListingPrefs({ mode: 'icons', scale: prev.viewScale });
-                  return { ...prev, viewMode: 'icons' };
+                  const next = { ...prev, viewMode: 'icons' as const };
+                  persistListing(active, next);
+                  return next;
                 });
               }}
             />
@@ -1618,8 +1690,9 @@ function App() {
                 const setter = active === 'left' ? setLeft : setRight;
                 setter((prev) => {
                   if (!prev) return prev;
-                  storeListingPrefs({ mode: 'thumbnails', scale: prev.viewScale });
-                  return { ...prev, viewMode: 'thumbnails' };
+                  const next = { ...prev, viewMode: 'thumbnails' as const };
+                  persistListing(active, next);
+                  return next;
                 });
               }}
             />
@@ -1755,33 +1828,99 @@ function App() {
         ) : null}
       </main>
 
-      <section className={`transcript${speechSettingsOpen ? ' settings-open' : ''}`}>
+      <section
+        className={`transcript${speechSettingsOpen ? ' settings-open' : ''}${
+          transcriptDrawer.collapsed && !speechSettingsOpen ? ' collapsed' : ''
+        }`}
+        style={{
+          height: effectiveTranscriptHeight(transcriptDrawer, speechSettingsOpen)
+        }}
+      >
+        {!transcriptDrawer.collapsed || speechSettingsOpen ? (
+          <div
+            className="transcript-resize"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize transcript drawer"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              (event.target as HTMLElement).setPointerCapture(event.pointerId);
+              transcriptResizeRef.current = {
+                startY: event.clientY,
+                startHeight: transcriptDrawer.height
+              };
+            }}
+            onPointerMove={(event) => {
+              const drag = transcriptResizeRef.current;
+              if (!drag) return;
+              const nextHeight = clampTranscriptHeight(drag.startHeight + (drag.startY - event.clientY));
+              updateTranscriptDrawer({ height: nextHeight, collapsed: false });
+            }}
+            onPointerUp={() => {
+              transcriptResizeRef.current = null;
+            }}
+            onPointerCancel={() => {
+              transcriptResizeRef.current = null;
+            }}
+          />
+        ) : null}
         <div className="transcript-bar">
-          <span>
-            <strong>TRANSCRIPT & ACTION BUS</strong>
-            <span style={{ margin: '0 8px', color: 'var(--divider)' }}>·</span>
-            fuzzy: depth-2
-            <span style={{ margin: '0 8px', color: 'var(--divider)' }}>·</span>
-            engine: {speechSettings.engine}
-            {speechKeyStatus.stored ? (
+          <span className="transcript-status">
+            <strong>TRANSCRIPT</strong>
+            {transcriptDrawer.collapsed && !speechSettingsOpen ? (
               <>
                 <span style={{ margin: '0 8px', color: 'var(--divider)' }}>·</span>
-                key: {speechKeyStatus.sessionOnly ? 'session' : 'stored'}
+                <span className="transcript-last">{log.at(-1) ?? ''}</span>
               </>
-            ) : null}
+            ) : (
+              <>
+                <span style={{ margin: '0 8px', color: 'var(--divider)' }}>·</span>
+                fuzzy: depth-2
+                <span style={{ margin: '0 8px', color: 'var(--divider)' }}>·</span>
+                engine: {speechSettings.engine}
+                {speechKeyStatus.stored ? (
+                  <>
+                    <span style={{ margin: '0 8px', color: 'var(--divider)' }}>·</span>
+                    key: {speechKeyStatus.sessionOnly ? 'session' : 'stored'}
+                  </>
+                ) : null}
+              </>
+            )}
           </span>
-          <span>
+          <span className="transcript-bar-actions">
+            <button
+              type="button"
+              className="speech-gear"
+              title={transcriptDrawer.collapsed ? 'Expand transcript' : 'Collapse transcript'}
+              aria-expanded={!transcriptDrawer.collapsed}
+              onClick={() => {
+                if (speechSettingsOpen) setSpeechSettingsOpen(false);
+                updateTranscriptDrawer({ collapsed: !transcriptDrawer.collapsed });
+              }}
+            >
+              <Icon name={transcriptDrawer.collapsed ? 'chevron-up' : 'chevron-down'} />
+              {transcriptDrawer.collapsed ? 'Expand' : 'Collapse'}
+            </button>
             <button
               type="button"
               className="speech-gear"
               title="Settings"
               aria-expanded={speechSettingsOpen}
-              onClick={() => setSpeechSettingsOpen((v) => !v)}
+              onClick={() => {
+                if (!speechSettingsOpen && transcriptDrawer.collapsed) {
+                  updateTranscriptDrawer({ collapsed: false });
+                }
+                setSpeechSettingsOpen((v) => !v);
+              }}
             >
               <Icon name="info" /> Settings
             </button>
-            <span className="kbd">Tab</span> pane · <span className="kbd">Ctrl+K</span> jump ·{' '}
-            <span className="kbd">F5/F6</span> copy/move→
+            {!transcriptDrawer.collapsed || speechSettingsOpen ? (
+              <>
+                <span className="kbd">Tab</span> pane · <span className="kbd">Ctrl+K</span> jump ·{' '}
+                <span className="kbd">F5/F6</span> copy/move→
+              </>
+            ) : null}
           </span>
         </div>
         {speechSettingsOpen ? (
@@ -1972,53 +2111,70 @@ function App() {
             </label>
           </div>
         ) : null}
-        <div className="transcript-log">
-          {log.slice(speechSettingsOpen ? -3 : -6).map((line, i) => (
-            <div key={`${i}-${line}`} className={line.includes('→') || line.includes('navigate') ? 'line-accent' : undefined}>
-              {line}
-            </div>
-          ))}
-        </div>
-        <div className="transcript-input">
-          <select
-            value={speechSettings.engine}
-            onChange={(e) => updateSpeech({ engine: e.target.value as SpeechSettings['engine'] })}
-            aria-label="Speech engine"
-          >
-            <option value="demo">Demo</option>
-            <option value="builtin">Builtin Whisper</option>
-            <option value="server">Server ASR</option>
-          </select>
-          {speechSettings.engine === 'builtin' ? (
-            <select
-              value={speechSettings.model}
-              onChange={(e) => updateSpeech({ model: e.target.value })}
-              aria-label="Whisper model"
-              title={describeDownload(speechSettings.model, speechSettings.precision)}
-            >
-              {SPEECH_MODELS.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.label}
-                </option>
+        {!transcriptDrawer.collapsed || speechSettingsOpen ? (
+          <>
+            <div className="transcript-log">
+              {log.slice(speechSettingsOpen ? -3 : -6).map((line, i) => (
+                <div
+                  key={`${i}-${line}`}
+                  className={line.includes('→') || line.includes('navigate') ? 'line-accent' : undefined}
+                >
+                  {line}
+                </div>
               ))}
-            </select>
-          ) : null}
-          <input
-            value={demoText}
-            onChange={(e) => setDemoText(e.target.value)}
-            placeholder={
-              speechSettings.engine === 'demo'
-                ? 'Demo transcript…'
-                : speechSettings.engine === 'builtin'
-                  ? 'Mic → local Whisper (first run downloads model)'
-                  : 'Mic → server ASR'
-            }
-            aria-label="Demo transcript"
-            disabled={speechSettings.engine !== 'demo'}
-          />
-          <ToolButton icon="mic" label="Nav" title="Navigate jewel" onClick={() => cmds()?.voiceNavigate()} />
-          <ToolButton icon="spark" label="Act" title="Action jewel" onClick={() => cmds()?.voiceAction()} />
-        </div>
+            </div>
+            <div className="transcript-input">
+              <select
+                value={speechSettings.engine}
+                onChange={(e) => updateSpeech({ engine: e.target.value as SpeechSettings['engine'] })}
+                aria-label="Speech engine"
+              >
+                <option value="demo">Demo</option>
+                <option value="builtin">Builtin Whisper</option>
+                <option value="server">Server ASR</option>
+              </select>
+              {speechSettings.engine === 'builtin' ? (
+                <select
+                  value={speechSettings.model}
+                  onChange={(e) => updateSpeech({ model: e.target.value })}
+                  aria-label="Whisper model"
+                  title={describeDownload(speechSettings.model, speechSettings.precision)}
+                >
+                  {SPEECH_MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              <input
+                value={demoText}
+                onChange={(e) => setDemoText(e.target.value)}
+                placeholder={
+                  speechSettings.engine === 'demo'
+                    ? 'Demo transcript…'
+                    : speechSettings.engine === 'builtin'
+                      ? 'Mic → local Whisper (first run downloads model)'
+                      : 'Mic → server ASR'
+                }
+                aria-label="Demo transcript"
+                disabled={speechSettings.engine !== 'demo'}
+              />
+              <ToolButton
+                icon="mic"
+                label="Nav"
+                title="Navigate jewel"
+                onClick={() => cmds()?.voiceNavigate()}
+              />
+              <ToolButton
+                icon="spark"
+                label="Act"
+                title="Action jewel"
+                onClick={() => cmds()?.voiceAction()}
+              />
+            </div>
+          </>
+        ) : null}
       </section>
 
       <footer className="statusbar">

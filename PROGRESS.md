@@ -2,18 +2,18 @@
 
 ## Current
 
-P4.2 distinct FileMan app icon + P4.4 GitHub Actions CI.
+P3.3 collapsible transcript drawer + P3.4 per-pane column sort.
 
 ## Delivered
 
-- Dual-pane commander, voice, packaging, view modes, layouts, terminal launcher prefs
-- App icon (`build/icon.svg` → png/ico) wired into BrowserWindow + electron-builder
-- CI workflow: typecheck + test + build on push/PR to main/dev
+- Commander core, voice, packaging, views, layouts, terminal prefs, icon, CI
+- Transcript drawer: collapse to status line, drag-resize height, localStorage persist
+- Details headers: Name / Size / Modified click-to-sort (dirs first), per-pane prefs
 
 ## Next
 
-- P3.3 transcript drawer / P3.4 column sort
-- Optional: richer ZeroG Term deep-link for cwd
+- Optional: richer ZeroG Term deep-link for cwd (`ZEROG_OPEN_CWD`)
+- Later: D5 Pro Commander deck / themes
 
 ## Blockers
 

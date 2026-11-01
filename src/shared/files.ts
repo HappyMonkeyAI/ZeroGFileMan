@@ -1,11 +1,12 @@
 import type { FileEntry } from './types.js';
+import { sortEntriesBy } from './listing-sort.js';
 
+export { sortEntriesBy } from './listing-sort.js';
+export type { ListingSortDir, ListingSortKey } from './listing-sort.js';
+
+/** Default listing order: directories first, then name ascending. */
 export function sortEntries(entries: FileEntry[]): FileEntry[] {
-  return [...entries].sort((a, b) => {
-    const rank = (entry: FileEntry) => (entry.kind === 'directory' ? 0 : 1);
-    if (rank(a) !== rank(b)) return rank(a) - rank(b);
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-  });
+  return sortEntriesBy(entries, 'name', 'asc');
 }
 
 export function isHiddenName(name: string): boolean {

@@ -62,8 +62,8 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 |----|------|------------|--------|
 | P3.1 | Split layouts | Adapt Term `pane-layout`: dual vertical (default), dual horizontal, single maximize | done |
 | P3.2 | Optional 4-pane grid | Only after dual layouts feel solid | open |
-| P3.3 | Collapsible transcript drawer | Height persist; collapse to one status line | open |
-| P3.4 | Column sort | Name / size / modified click-to-sort; persist per pane | open |
+| P3.3 | Collapsible transcript drawer | Height persist; collapse to one status line | done |
+| P3.4 | Column sort | Name / size / modified click-to-sort; persist per pane | done |
 | P3.5 | Listing view modes | Explorer-style **Details** / **Icons** / **Thumbnails**; per-pane toolbar; **Ctrl+wheel** zooms icon/thumbnail size | done |
 
 ### P4 — Packaging & polish
@@ -93,7 +93,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 
 ## Suggested next slice
 
-**P3.3** transcript drawer / **P3.4** column sort; optional Term-side `ZEROG_OPEN_CWD` deep-link.
+Optional Term-side `ZEROG_OPEN_CWD` deep-link; later D5 Pro Commander deck polish.
 
 ## Task board seed
 
