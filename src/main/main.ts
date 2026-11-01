@@ -41,6 +41,7 @@ async function speechKeyStatus(): Promise<SpeechApiKeyStatus> {
 }
 
 function createWindow(): void {
+  const iconPath = join(root, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 860,
@@ -48,6 +49,7 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: '#070b12',
     autoHideMenuBar: true,
+    ...(existsSync(iconPath) ? { icon: iconPath } : {}),
     webPreferences: {
       preload: join(root, 'dist', 'main', 'preload.cjs'),
       contextIsolation: true,

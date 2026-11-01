@@ -71,9 +71,9 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | ID | Task | Acceptance | Status |
 |----|------|------------|--------|
 | P4.1 | electron-builder | Portable + NSIS x64; appId already `com.happymonkeyai.zerogfileman` | done |
-| P4.2 | App icon | Distinct FileMan icon (not Term’s) | open (default Electron icon for now) |
+| P4.2 | App icon | Distinct FileMan dual-pane icon (`build/icon.*`); electron-builder + window chrome | done |
 | P4.3 | README quickstart | Screenshots optional; clear `npm start` path | done |
-| P4.4 | CI | GitHub Action: typecheck + test + build on push | open |
+| P4.4 | CI | GitHub Action: typecheck + test + build on push | done |
 
 ## Later / park
 
@@ -93,7 +93,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 
 ## Suggested next slice
 
-**P4.2 app icon**, then **P4.4 CI**, then **P3.3** transcript drawer / **P3.4** column sort.
+**P3.3** transcript drawer / **P3.4** column sort; optional Term-side `ZEROG_OPEN_CWD` deep-link.
 
 ## Task board seed
 

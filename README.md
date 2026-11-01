@@ -41,7 +41,7 @@ Artifacts land in `release/`:
 - `ZeroGFileMan-<version>-Setup.exe` — NSIS installer (choose install dir)
 - `ZeroGFileMan-<version>-Portable.exe` — portable single file
 
-Unsigned by default (`signAndEditExecutable: false`). App id: `com.happymonkeyai.zerogfileman`.
+Unsigned by default (`signAndEditExecutable: false`). App id: `com.happymonkeyai.zerogfileman`. Window/installer icon lives in `build/` (`npm run icon:render` regenerates png/ico from the SVG).
 
 ## What it does
 

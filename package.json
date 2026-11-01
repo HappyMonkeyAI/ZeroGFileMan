@@ -23,6 +23,7 @@
     "start": "node scripts/start-electron.mjs",
     "start:electron-cli": "electron .",
     "package:win": "npm run build && electron-builder --win nsis portable --x64 --publish never",
+    "icon:render": "node scripts/render-icon.mjs",
     "ci": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
@@ -47,14 +48,17 @@
     "productName": "ZeroG FileMan",
     "asar": true,
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
+    "icon": "build/icon.png",
     "files": [
       "dist/main/**/*",
       "dist/renderer/**/*",
       "package.json"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -75,7 +79,9 @@
       "artifactName": "ZeroGFileMan-${version}-Setup.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": false
+      "perMachine": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     },
     "portable": {
       "artifactName": "ZeroGFileMan-${version}-Portable.${ext}"
