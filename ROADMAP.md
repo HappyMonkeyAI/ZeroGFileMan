@@ -21,6 +21,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | D9 | Favorites + Ctrl+K jump | userData favorites; brand-bar jump + fuzzy Enter |
 | D10 | Builtin Whisper worker | Transformers.js voice-worker; demo / builtin / server |
 | D11 | Speech settings + safeStorage key | Precision/device/silence/max; server key encrypted |
+| D12 | Jewel UX polish | Click-toggle + hold PTT; Esc cancel; bus listening state |
 
 ## Near-term (ordered)
 
@@ -49,7 +50,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 |----|------|------------|--------|
 | P2.1 | Builtin Whisper worker | Term `voice-worker` + Transformers.js; demo / builtin / server | done |
 | P2.2 | Speech settings UI | Model pick, silence threshold, max utterance; key in `safeStorage` | done |
-| P2.3 | Jewel UX polish | Push-to-talk hold or click-toggle; listening state in transcript bus | open |
+| P2.3 | Jewel UX polish | Push-to-talk hold or click-toggle; listening state in transcript bus | done |
 
 ### P3 — Layout & density
 
@@ -81,7 +82,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 
 ## Suggested next slice
 
-**P2.3 jewel UX polish**, or **P4.1 packaging**, then **P3.1 layouts**.
+**P4.1 packaging** (electron-builder), then **P3.1 layouts**.
 
 ## Task board seed
 

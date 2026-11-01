@@ -10,7 +10,16 @@ Term uses one mic that types into a PTY. FileMan needs directory navigation and 
 
 ## Decision
 
-Each pane exposes **two** push-to-talk controls: **Navigate** (fuzzy path match) and **Action** (command map). Keyboard remains complete without either.
+Each pane exposes **two** voice jewels: **Navigate** (fuzzy path match) and **Action** (command map).
+
+Interaction (P2.3):
+
+- **Click-toggle** — short press starts listening; press again to stop and transcribe
+- **Push-to-talk** — hold past ~280ms; release stops and transcribes
+- **Esc** cancels without transcribing; max utterance auto-stops from speech settings
+- Listening / transcribing states are mirrored on the transcript bus
+
+Keyboard remains complete without either jewel.
 
 ## Consequences
 

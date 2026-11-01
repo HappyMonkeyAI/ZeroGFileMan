@@ -1,4 +1,12 @@
-import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  StrictMode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent
+} from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   baseName,
@@ -22,6 +30,7 @@ import {
 } from '../shared/pane-history.js';
 import { isFavoritePath, type Favorite } from '../shared/favorites.js';
 import type { FileEntry, SpeechApiKeyStatus, SpeechSettings, VoiceMode } from '../shared/types.js';
+import { shouldStopJewelOnRelease } from '../shared/voice-jewel.js';
 import { Icon } from './icons.js';
 import { SpeechClient, type SpeechWorker } from './speech.js';
 import {
@@ -41,6 +50,8 @@ import {
 } from './themes.js';
 import { isMostlySilence, VoiceRecorder } from './voice.js';
 import './styles.css';
+
+type VoicePhase = 'idle' | 'listening' | 'transcribing';
 
 const speech = new SpeechClient({
   createWorker: () =>
@@ -184,9 +195,27 @@ function FilePane(props: {
     });
   }, [pane.entries, pane.filter, showHidden]);
   const recorderRef = useRef<VoiceRecorder | null>(null);
+  const pressRef = useRef<{ mode: VoiceMode; at: number; releaseWillStop: boolean } | null>(null);
+  const pendingStartRef = useRef<Promise<boolean> | null>(null);
+  const limitTimerRef = useRef<number | null>(null);
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>('idle');
   const selectedEntry = visible.find((e) => e.name === pane.selected) ?? null;
   const dirs = visible.filter((e) => e.kind === 'directory' || e.kind === 'symlink').length;
   const files = visible.length - dirs;
+
+  const clearVoiceLimit = useCallback(() => {
+    if (limitTimerRef.current != null) {
+      window.clearTimeout(limitTimerRef.current);
+      limitTimerRef.current = null;
+    }
+  }, []);
+
+  const bus = useCallback(
+    (message: string) => {
+      onLog(`[${stamp()}] ${side.toUpperCase()} ${message}`);
+    },
+    [onLog, side]
+  );
 
   const navigateTo = useCallback(
     async (path: string, options: { record?: boolean; history?: HistoryState } = {}) => {
@@ -445,64 +474,197 @@ function FilePane(props: {
     [doCopyClip, doDelete, doNewFolder, doPaste, doRename, onChange, onLog, pane, refresh]
   );
 
+  const cancelListening = useCallback(
+    (reason = 'cancelled') => {
+      clearVoiceLimit();
+      pressRef.current = null;
+      recorderRef.current?.cancel();
+      recorderRef.current = null;
+      setVoicePhase('idle');
+      onChange({ ...pane, listening: null, status: pane.path });
+      bus(`${reason}`);
+    },
+    [bus, clearVoiceLimit, onChange, pane]
+  );
+
+  const finishListening = useCallback(
+    async (mode: VoiceMode) => {
+      clearVoiceLimit();
+      pressRef.current = null;
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+      if (!recorder) {
+        setVoicePhase('idle');
+        onChange({ ...pane, listening: null, status: pane.path });
+        return;
+      }
+      const samples = await recorder.stop();
+      if (!samples || isMostlySilence(samples, speechSettings.silenceRmsThreshold)) {
+        setVoicePhase('idle');
+        onChange({ ...pane, listening: null, status: 'No speech detected' });
+        bus(`${mode}: no speech detected`);
+        return;
+      }
+      try {
+        setVoicePhase('transcribing');
+        onChange({ ...pane, listening: mode, status: `Transcribing (${speechSettings.engine})…` });
+        bus(`${mode}: transcribing (${speechSettings.engine})…`);
+        const result = await speech.transcribe(samples, speechSettings, (progress) => {
+          if (progress.kind === 'loading') {
+            const pct = progress.progress == null ? '…' : `${Math.round(progress.progress)}%`;
+            onChange({ ...pane, listening: mode, status: `Loading model ${pct}` });
+            bus(`${mode}: loading model ${pct}`);
+          } else {
+            bus(progress.message);
+          }
+        });
+        bus(`${mode}: “${result.text}” (${result.elapsedMs}ms · ${result.engine})`);
+        setVoicePhase('idle');
+        if (mode === 'navigate') await applyNavigate(result.text);
+        else await applyAction(result.text);
+      } catch (error) {
+        setVoicePhase('idle');
+        onChange({ ...pane, listening: null, status: pane.path });
+        bus(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [applyAction, applyNavigate, bus, clearVoiceLimit, onChange, pane, speechSettings]
+  );
+
+  const startListening = useCallback(
+    async (mode: VoiceMode): Promise<boolean> => {
+      if (pane.listening || voicePhase !== 'idle' || pendingStartRef.current) return false;
+      const work = (async () => {
+        const recorder = new VoiceRecorder();
+        try {
+          await recorder.start();
+        } catch (error) {
+          bus(`mic unavailable: ${error instanceof Error ? error.message : String(error)}`);
+          return false;
+        }
+        recorderRef.current = recorder;
+        setVoicePhase('listening');
+        onChange({ ...pane, listening: mode, status: `Listening (${mode})…` });
+        bus(`${mode}: listening… (click again or release hold to stop · Esc cancel)`);
+        clearVoiceLimit();
+        limitTimerRef.current = window.setTimeout(() => {
+          void finishListening(mode);
+        }, Math.max(3, speechSettings.maxUtteranceSeconds) * 1000);
+        return true;
+      })();
+      pendingStartRef.current = work;
+      try {
+        return await work;
+      } finally {
+        if (pendingStartRef.current === work) pendingStartRef.current = null;
+      }
+    },
+    [
+      bus,
+      clearVoiceLimit,
+      finishListening,
+      onChange,
+      pane,
+      speechSettings.maxUtteranceSeconds,
+      voicePhase
+    ]
+  );
+
   const toggleJewel = useCallback(
     async (mode: VoiceMode) => {
       onActivate();
       if (speechSettings.engine === 'demo') {
+        setVoicePhase('transcribing');
         onChange({ ...pane, listening: mode, status: `Demo (${mode})…` });
+        bus(`${mode}: demo…`);
         try {
           const result = await speech.transcribe(new Float32Array(0), speechSettings, undefined, demoText);
-          onLog(`[${stamp()}] ${mode}: “${result.text}”`);
+          bus(`${mode}: “${result.text}” (demo)`);
+          setVoicePhase('idle');
           if (mode === 'navigate') await applyNavigate(result.text);
           else await applyAction(result.text);
         } catch (error) {
-          onLog(error instanceof Error ? error.message : String(error));
+          setVoicePhase('idle');
           onChange({ ...pane, listening: null });
+          bus(error instanceof Error ? error.message : String(error));
         }
         return;
       }
 
       if (pane.listening === mode && recorderRef.current) {
-        const samples = await recorderRef.current.stop();
-        recorderRef.current = null;
-        if (!samples || isMostlySilence(samples, speechSettings.silenceRmsThreshold)) {
-          onChange({ ...pane, listening: null, status: 'No speech detected' });
-          return;
-        }
-        try {
-          onChange({ ...pane, listening: mode, status: `Transcribing (${speechSettings.engine})…` });
-          const result = await speech.transcribe(samples, speechSettings, (progress) => {
-            if (progress.kind === 'loading') {
-              const pct = progress.progress == null ? '…' : `${Math.round(progress.progress)}%`;
-              onChange({ ...pane, listening: mode, status: `Loading model ${pct}` });
-            } else {
-              onLog(`[${stamp()}] ${progress.message}`);
-            }
-          });
-          onLog(`[${stamp()}] ${mode}: “${result.text}” (${result.elapsedMs}ms · ${result.engine})`);
-          if (mode === 'navigate') await applyNavigate(result.text);
-          else await applyAction(result.text);
-        } catch (error) {
-          onLog(error instanceof Error ? error.message : String(error));
-          onChange({ ...pane, listening: null });
-        }
+        await finishListening(mode);
         return;
       }
-
-      if (pane.listening) return;
-      const recorder = new VoiceRecorder();
-      recorderRef.current = recorder;
-      onChange({ ...pane, listening: mode, status: `Listening (${mode})…` });
-      try {
-        await recorder.start();
-      } catch (error) {
-        recorderRef.current = null;
-        onLog(error instanceof Error ? error.message : String(error));
-        onChange({ ...pane, listening: null });
-      }
+      if (pane.listening || voicePhase !== 'idle') return;
+      await startListening(mode);
     },
-    [applyAction, applyNavigate, demoText, onActivate, onChange, onLog, pane, speechSettings]
+    [
+      applyAction,
+      applyNavigate,
+      bus,
+      demoText,
+      finishListening,
+      onActivate,
+      onChange,
+      pane,
+      speechSettings,
+      startListening,
+      voicePhase
+    ]
   );
+
+  const jewelPointerDown = useCallback(
+    (mode: VoiceMode, event: ReactPointerEvent<HTMLButtonElement>) => {
+      onActivate();
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      if (speechSettings.engine === 'demo') {
+        pressRef.current = null;
+        void toggleJewel(mode);
+        return;
+      }
+      if (pane.listening === mode) {
+        pressRef.current = { mode, at: performance.now(), releaseWillStop: true };
+        return;
+      }
+      if (pane.listening || voicePhase !== 'idle') return;
+      pressRef.current = { mode, at: performance.now(), releaseWillStop: false };
+      void startListening(mode);
+    },
+    [onActivate, pane.listening, speechSettings.engine, startListening, toggleJewel, voicePhase]
+  );
+
+  const jewelPointerUp = useCallback(
+    (mode: VoiceMode) => {
+      void (async () => {
+        if (pendingStartRef.current) await pendingStartRef.current;
+        const press = pressRef.current;
+        pressRef.current = null;
+        if (speechSettings.engine === 'demo') return;
+        if (!press || press.mode !== mode) return;
+        if (!recorderRef.current) return;
+        const heldMs = performance.now() - press.at;
+        if (shouldStopJewelOnRelease({ releaseWillStop: press.releaseWillStop, heldMs })) {
+          await finishListening(mode);
+        }
+      })();
+    },
+    [finishListening, speechSettings.engine]
+  );
+
+  useEffect(() => {
+    if (voicePhase !== 'listening' || !pane.listening) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelListening('listening cancelled');
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [cancelListening, pane.listening, voicePhase]);
+
+  useEffect(() => () => clearVoiceLimit(), [clearVoiceLimit]);
 
   useEffect(() => {
     if (!active) {
@@ -594,17 +756,27 @@ function FilePane(props: {
             <div className="jewels">
               <button
                 type="button"
-                className={`jewel nav${pane.listening === 'navigate' ? ' listening' : ''}`}
-                title="Navigate voice"
-                onClick={() => void toggleJewel('navigate')}
+                className={`jewel nav${pane.listening === 'navigate' ? ` ${voicePhase === 'transcribing' ? 'transcribing' : 'listening'}` : ''}`}
+                title="Navigate: click to toggle, hold to talk, Esc cancel"
+                aria-label="Navigate voice"
+                aria-pressed={pane.listening === 'navigate'}
+                onPointerDown={(e) => jewelPointerDown('navigate', e)}
+                onPointerUp={() => jewelPointerUp('navigate')}
+                onPointerCancel={() => jewelPointerUp('navigate')}
+                onClick={(e) => e.preventDefault()}
               >
                 <Icon name="mic" />
               </button>
               <button
                 type="button"
-                className={`jewel act${pane.listening === 'action' ? ' listening' : ''}`}
-                title="Action voice"
-                onClick={() => void toggleJewel('action')}
+                className={`jewel act${pane.listening === 'action' ? ` ${voicePhase === 'transcribing' ? 'transcribing' : 'listening'}` : ''}`}
+                title="Action: click to toggle, hold to talk, Esc cancel"
+                aria-label="Action voice"
+                aria-pressed={pane.listening === 'action'}
+                onPointerDown={(e) => jewelPointerDown('action', e)}
+                onPointerUp={() => jewelPointerUp('action')}
+                onPointerCancel={() => jewelPointerUp('action')}
+                onClick={(e) => e.preventDefault()}
               >
                 <Icon name="spark" />
               </button>
@@ -1478,7 +1650,7 @@ function App() {
           </span>
         </div>
         <div className="cluster">
-          N = navigate · A = action · depth-2 fuzzy
+          jewels: click toggle · hold PTT · Esc cancel
         </div>
         <div className="cluster">
           theme: {theme} · {active} pane

@@ -2,19 +2,18 @@
 
 ## Current
 
-P2.2 speech settings + safeStorage API key done; P2.3 jewel polish / packaging next.
+P2 voice slice complete (builtin Whisper + settings + jewel UX). Next: packaging / layouts.
 
 ## Delivered
 
-- Dual-pane commander + favorites + Ctrl+K jump + history + F5/F6
-- Builtin Whisper worker (demo / builtin / server)
-- Speech settings panel: model, precision, device, language, silence, max sec, server URL/model
-- Speech API key via Electron `safeStorage` (session-only fallback if encryption unavailable)
+- Dual-pane commander + favorites + Ctrl+K + history + F5/F6
+- Builtin Whisper + speech settings + safeStorage API key
+- Jewel UX: click-toggle, hold-to-talk (~280ms), Esc cancel, max-utterance stop, listening/transcribing on transcript bus
 
 ## Next
 
-- P2.3 Jewel UX polish
-- P4.1 electron-builder / P3.1 layouts
+- P4.1 electron-builder
+- P3.1 layouts
 
 ## Blockers
 

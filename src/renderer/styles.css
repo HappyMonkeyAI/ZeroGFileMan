@@ -686,6 +686,13 @@ select {
   animation: pulse 1s ease-in-out infinite;
 }
 
+.jewel.transcribing {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--input-bg));
+  animation: pulse 0.7s ease-in-out infinite;
+  cursor: wait;
+}
+
 .entry-heading,
 .entry {
   display: grid;
