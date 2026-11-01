@@ -17,6 +17,7 @@ import {
   searchLocalShallow
 } from './local-fs.js';
 import { defaultSecretsPath, SecretStore, SPEECH_API_KEY } from './secret-store.js';
+import { openSystemTerminal, openTerminalForPath } from './terminal-launch.js';
 import { readThumbnail } from './thumbnails.js';
 import type { FileEntry, SpeechApiKeyStatus } from '../shared/types.js';
 
@@ -127,21 +128,24 @@ ipcMain.handle('shell:openWith', async (_e, path: unknown, appName: unknown) => 
     return;
   }
   if (which === 'terminal') {
-    if (process.platform === 'win32') {
-      spawn('wt.exe', ['-d', target], { detached: true, stdio: 'ignore' }).on('error', () => {
-        spawn('cmd.exe', ['/c', 'start', 'powershell', '-NoExit', '-Command', `Set-Location -LiteralPath '${target.replace(/'/g, "''")}'`], {
-          detached: true,
-          stdio: 'ignore'
-        }).unref();
-      });
-    } else {
-      spawn('x-terminal-emulator', ['--working-directory', target], { detached: true, stdio: 'ignore' }).unref();
-    }
+    openSystemTerminal(target);
     return;
   }
 
   const err = await shell.openPath(target);
   if (err) throw new Error(err);
+});
+
+ipcMain.handle('shell:openTerminal', (_e, path: unknown, options?: unknown) => {
+  const opts =
+    options && typeof options === 'object'
+      ? (options as { launcher?: unknown; customCommand?: unknown })
+      : {};
+  openTerminalForPath({
+    path,
+    launcher: opts.launcher,
+    customCommand: opts.customCommand
+  });
 });
 
 ipcMain.handle('speechKey:status', () => speechKeyStatus());

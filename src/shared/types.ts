@@ -1,6 +1,8 @@
 import type { Favorite } from './favorites.js';
+import type { TerminalLauncher } from './terminal-launcher.js';
 
 export type { Favorite };
+export type { TerminalLauncher, TerminalPrefs } from './terminal-launcher.js';
 
 export interface FileEntry {
   name: string;
@@ -47,6 +49,11 @@ export interface SpeechSettings {
 
 export type OpenWithApp = 'default' | 'notepad' | 'cursor' | 'explorer' | 'terminal';
 
+export type OpenTerminalOptions = {
+  launcher?: TerminalLauncher;
+  customCommand?: string;
+};
+
 export type MenuCommand = string;
 
 export type SpeechApiKeyStatus = {
@@ -79,6 +86,7 @@ export interface FileManApi {
   openPath(path: string): Promise<void>;
   showItemInFolder(path: string): Promise<void>;
   openWith(path: string, app: OpenWithApp | string): Promise<void>;
+  openTerminal(path: string, options?: OpenTerminalOptions): Promise<void>;
   speechApiKeyStatus(): Promise<SpeechApiKeyStatus>;
   saveSpeechApiKey(key: string): Promise<SpeechApiKeyStatus>;
   clearSpeechApiKey(): Promise<SpeechApiKeyStatus>;

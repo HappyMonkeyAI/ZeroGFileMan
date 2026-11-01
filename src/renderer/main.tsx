@@ -44,7 +44,14 @@ import {
   workspaceGridTemplate,
   type WorkspaceLayoutState
 } from '../shared/pane-layout.js';
-import type { FileEntry, SpeechApiKeyStatus, SpeechSettings, VoiceMode } from '../shared/types.js';
+import type {
+  FileEntry,
+  SpeechApiKeyStatus,
+  SpeechSettings,
+  TerminalLauncher,
+  TerminalPrefs,
+  VoiceMode
+} from '../shared/types.js';
 import { shouldStopJewelOnRelease } from '../shared/voice-jewel.js';
 import { Icon } from './icons.js';
 import { loadStoredWorkspaceLayout, storeWorkspaceLayout } from './layout-prefs.js';
@@ -58,6 +65,7 @@ import {
   supportsLanguageSelection
 } from './speech-models.js';
 import { loadStoredSpeechSettings, storeSpeechSettings } from './speech-settings.js';
+import { loadStoredTerminalPrefs, storeTerminalPrefs } from './terminal-prefs.js';
 import {
   applyTheme,
   isThemeId,
@@ -234,6 +242,7 @@ function FilePane(props: {
   showHidden: boolean;
   autoNavigate: boolean;
   speechSettings: SpeechSettings;
+  terminalPrefs: TerminalPrefs;
   demoText: string;
   clipboard: FileClip | null;
   otherPath: string;
@@ -253,6 +262,7 @@ function FilePane(props: {
     showHidden,
     autoNavigate,
     speechSettings,
+    terminalPrefs,
     demoText,
     clipboard,
     otherPath,
@@ -264,6 +274,15 @@ function FilePane(props: {
     onRefreshPeer,
     onRegisterCommands
   } = props;
+
+  const openTerminalHere = useCallback(
+    (dir: string) =>
+      api().openTerminal(dir, {
+        launcher: terminalPrefs.launcher,
+        customCommand: terminalPrefs.customCommand
+      }),
+    [terminalPrefs.customCommand, terminalPrefs.launcher]
+  );
 
   const crumbs = useMemo(() => breadcrumbSegments(pane.path), [pane.path]);
   const visible = useMemo(() => {
@@ -526,8 +545,8 @@ function FilePane(props: {
             onLog(`[${stamp()}] cursor ${selectedPath}`);
             break;
           case 'open-terminal':
-            await api().openWith(pane.path, 'terminal');
-            onLog(`[${stamp()}] terminal ${pane.path}`);
+            await openTerminalHere(pane.path);
+            onLog(`[${stamp()}] terminal ${pane.path} (${terminalPrefs.launcher})`);
             break;
           case 'open-default':
             await api().openPath(selectedPath);
@@ -551,7 +570,19 @@ function FilePane(props: {
         onChange({ ...pane, listening: null });
       }
     },
-    [doCopyClip, doDelete, doNewFolder, doPaste, doRename, onChange, onLog, pane, refresh]
+    [
+      doCopyClip,
+      doDelete,
+      doNewFolder,
+      doPaste,
+      doRename,
+      onChange,
+      onLog,
+      openTerminalHere,
+      pane,
+      refresh,
+      terminalPrefs.launcher
+    ]
   );
 
   const cancelListening = useCallback(
@@ -770,7 +801,10 @@ function FilePane(props: {
         const sel = requireSelection();
         if (sel) void api().openWith(sel.path, 'notepad');
       },
-      openTerminal: () => void api().openWith(pane.path, 'terminal'),
+      openTerminal: () =>
+        void openTerminalHere(pane.path).then(() =>
+          onLog(`[${stamp()}] terminal ${pane.path} (${terminalPrefs.launcher})`)
+        ),
       reveal: () => {
         const target = pane.selected ? joinLocal(pane.path, pane.selected) : pane.path;
         void api().showItemInFolder(target);
@@ -796,10 +830,12 @@ function FilePane(props: {
     navigateTo,
     onLog,
     onRegisterCommands,
+    openTerminalHere,
     pane.path,
     pane.selected,
     refresh,
     requireSelection,
+    terminalPrefs.launcher,
     toggleJewel,
     transferToOther
   ]);
@@ -829,7 +865,12 @@ function FilePane(props: {
             </nav>
           </div>
           <div className="pane-pills">
-            <button type="button" className="pill" title="Terminal here" onClick={() => void api().openWith(pane.path, 'terminal')}>
+            <button
+              type="button"
+              className="pill"
+              title={`Terminal here (${terminalPrefs.launcher})`}
+              onClick={() => void openTerminalHere(pane.path)}
+            >
               <Icon name="terminal" />
             </button>
             <button
@@ -1051,6 +1092,7 @@ function App() {
   const [jumpQuery, setJumpQuery] = useState('');
   const [demoText, setDemoText] = useState('zerogfileman');
   const [speechSettings, setSpeechSettings] = useState<SpeechSettings>(() => loadStoredSpeechSettings());
+  const [terminalPrefs, setTerminalPrefs] = useState<TerminalPrefs>(() => loadStoredTerminalPrefs());
   const [speechSettingsOpen, setSpeechSettingsOpen] = useState(false);
   const [speechKeyDraft, setSpeechKeyDraft] = useState('');
   const [speechKeyStatus, setSpeechKeyStatus] = useState<SpeechApiKeyStatus>({
@@ -1083,6 +1125,14 @@ function App() {
     setSpeechSettings((prev) => {
       const next = { ...prev, ...patch };
       storeSpeechSettings(next);
+      return next;
+    });
+  }, []);
+
+  const updateTerminalPrefs = useCallback((patch: Partial<TerminalPrefs>) => {
+    setTerminalPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      storeTerminalPrefs(next);
       return next;
     });
   }, []);
@@ -1623,6 +1673,7 @@ function App() {
             showHidden={showHidden}
             autoNavigate={autoNavigate}
             speechSettings={speechSettings}
+            terminalPrefs={terminalPrefs}
             demoText={demoText}
             clipboard={clipboard}
             otherPath={right.path}
@@ -1687,6 +1738,7 @@ function App() {
             showHidden={showHidden}
             autoNavigate={autoNavigate}
             speechSettings={speechSettings}
+            terminalPrefs={terminalPrefs}
             demoText={demoText}
             clipboard={clipboard}
             otherPath={left.path}
@@ -1722,11 +1774,11 @@ function App() {
             <button
               type="button"
               className="speech-gear"
-              title="Speech settings"
+              title="Settings"
               aria-expanded={speechSettingsOpen}
               onClick={() => setSpeechSettingsOpen((v) => !v)}
             >
-              <Icon name="info" /> Speech
+              <Icon name="info" /> Settings
             </button>
             <span className="kbd">Tab</span> pane · <span className="kbd">Ctrl+K</span> jump ·{' '}
             <span className="kbd">F5/F6</span> copy/move→
@@ -1824,6 +1876,29 @@ function App() {
                 step={1}
                 value={speechSettings.maxUtteranceSeconds}
                 onChange={(e) => updateSpeech({ maxUtteranceSeconds: Number(e.target.value) })}
+              />
+            </label>
+            <label>
+              Terminal
+              <select
+                value={terminalPrefs.launcher}
+                onChange={(e) =>
+                  updateTerminalPrefs({ launcher: e.target.value as TerminalLauncher })
+                }
+                title="What the Terminal button opens"
+              >
+                <option value="system">System terminal</option>
+                <option value="zerogterm">ZeroG Term</option>
+                <option value="custom">Custom command</option>
+              </select>
+            </label>
+            <label className="speech-span-2">
+              Custom terminal
+              <input
+                value={terminalPrefs.customCommand}
+                disabled={terminalPrefs.launcher !== 'custom'}
+                placeholder='e.g. wt.exe -d "{path}" or "C:\Apps\Term.exe"'
+                onChange={(e) => updateTerminalPrefs({ customCommand: e.target.value })}
               />
             </label>
             <label className="speech-span-2">

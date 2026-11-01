@@ -25,6 +25,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | D13 | Windows packaging | electron-builder NSIS + portable → `release/` |
 | D14 | Listing view modes | Details / Icons / Thumbnails + Ctrl+wheel scale; thumb caps |
 | D15 | Split layouts | Side-by-side / stacked + maximize; draggable gutter |
+| D16 | Terminal launcher pref | System / ZeroG Term / custom command from Settings |
 
 ## Near-term (ordered)
 
@@ -81,6 +82,8 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 - Permissions / owner columns (platform-accurate, not fake Unix on NTFS)  
 - Thumbnail generation caps (size/type allowlist; no decode of huge RAW by default)  
 - Pane chrome stays Active/Idle (no Left/Right labels) — spatial layout is enough  
+- ZeroG Term CLI cwd protocol (`ZEROG_OPEN_CWD` / argv) — FileMan launches with cwd hint; Term can honor it more richly later  
+
 
 - SFTP pane (borrow SFTP / Term patterns)  
 - Shared `@zerog/speech` / `@zerog/workspace-layout` packages  
