@@ -22,6 +22,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | D10 | Builtin Whisper worker | Transformers.js voice-worker; demo / builtin / server |
 | D11 | Speech settings + safeStorage key | Precision/device/silence/max; server key encrypted |
 | D12 | Jewel UX polish | Click-toggle + hold PTT; Esc cancel; bus listening state |
+| D13 | Windows packaging | electron-builder NSIS + portable → `release/` |
 
 ## Near-term (ordered)
 
@@ -54,35 +55,38 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 
 ### P3 — Layout & density
 
-| ID | Task | Acceptance |
-|----|------|------------|
-| P3.1 | Split layouts | Adapt Term `pane-layout`: dual vertical (default), dual horizontal, single maximize |
-| P3.2 | Optional 4-pane grid | Only after dual layouts feel solid |
-| P3.3 | Collapsible transcript drawer | Height persist; collapse to one status line |
-| P3.4 | Column sort | Name / size / modified click-to-sort; persist per pane |
+| ID | Task | Acceptance | Status |
+|----|------|------------|--------|
+| P3.1 | Split layouts | Adapt Term `pane-layout`: dual vertical (default), dual horizontal, single maximize | open |
+| P3.2 | Optional 4-pane grid | Only after dual layouts feel solid | open |
+| P3.3 | Collapsible transcript drawer | Height persist; collapse to one status line | open |
+| P3.4 | Column sort | Name / size / modified click-to-sort; persist per pane | open |
+| P3.5 | Listing view modes | Explorer-style toggle: **Details** (current) / **Icons** / **Thumbnails**; per-pane, toolbar control | open — review candidate |
 
 ### P4 — Packaging & polish
 
-| ID | Task | Acceptance |
-|----|------|------------|
-| P4.1 | electron-builder | Portable + NSIS x64; appId already `com.happymonkeyai.zerogfileman` |
-| P4.2 | App icon | Distinct FileMan icon (not Term’s) |
-| P4.3 | README quickstart | Screenshots optional; clear `npm start` path |
-| P4.4 | CI | GitHub Action: typecheck + test + build on push |
+| ID | Task | Acceptance | Status |
+|----|------|------------|--------|
+| P4.1 | electron-builder | Portable + NSIS x64; appId already `com.happymonkeyai.zerogfileman` | done |
+| P4.2 | App icon | Distinct FileMan icon (not Term’s) | open (default Electron icon for now) |
+| P4.3 | README quickstart | Screenshots optional; clear `npm start` path | done |
+| P4.4 | CI | GitHub Action: typecheck + test + build on push | open |
 
 ## Later / park
 
 - Multi-select + drag-drop between panes  
 - Recursive delete with explicit danger modal (default stays non-recursive)  
 - Permissions / owner columns (platform-accurate, not fake Unix on NTFS)  
+- Thumbnail generation caps (size/type allowlist; no decode of huge RAW by default)  
 - SFTP pane (borrow SFTP / Term patterns)  
 - Shared `@zerog/speech` / `@zerog/workspace-layout` packages  
 - spine-design UI baselines  
 - Wake-word / always-on mic (out of scope unless accessibility-driven)
+- Full product review pass (UX + IPC + speech) after packaging lands
 
 ## Suggested next slice
 
-**P4.1 packaging** (electron-builder), then **P3.1 layouts**.
+**Owner review**, then **P3.5 view modes** and/or **P3.1 layouts**; **P4.2** icon; **P4.4** CI.
 
 ## Task board seed
 

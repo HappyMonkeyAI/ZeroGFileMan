@@ -4,7 +4,7 @@ Local-first, multi-pane developer file manager with **dual voice jewels** per pa
 
 **Repo:** [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan) (private)
 
-## Quick start
+## Quick start (dev)
 
 ```bash
 npm install
@@ -12,7 +12,9 @@ npm run build
 npm start
 ```
 
-Dev (main watch + Vite):
+`npm start` launches the local Electron binary via `scripts/start-electron.mjs` (avoids the Electron CLI re-download hang).
+
+Dev (main watch + Vite on `127.0.0.1:5174`):
 
 ```bash
 npm run dev
@@ -20,12 +22,33 @@ npm run dev
 npm start
 ```
 
-## What it does (scaffold)
+Checks:
 
-- Dual local panes with clickable breadcrumbs
-- List / enter directories / copy path
-- Per-pane **Navigate** and **Action** mic jewels (speech → fuzzy match / command preview)
-- Speech: demo typed transcript, or OpenAI-compatible transcription server
+```bash
+npm run typecheck
+npm test
+npm run build
+```
+
+## Packaged Windows build
+
+```bash
+npm run package:win
+```
+
+Artifacts land in `release/`:
+
+- `ZeroGFileMan-<version>-Setup.exe` — NSIS installer (choose install dir)
+- `ZeroGFileMan-<version>-Portable.exe` — portable single file
+
+Unsigned by default (`signAndEditExecutable: false`). App id: `com.happymonkeyai.zerogfileman`.
+
+## What it does
+
+- Dual local panes with breadcrumbs, history (Alt+←/→), favorites, Ctrl+K jump
+- CRUD + cross-pane clipboard; F5/F6 copy/move to the other pane
+- Per-pane **Navigate** / **Action** jewels: click-toggle or hold-to-talk; Esc cancels
+- Speech engines: demo transcript, builtin Whisper (Transformers.js), or OpenAI-compatible server (API key in OS safeStorage)
 
 ## Docs
 
@@ -33,9 +56,8 @@ npm start
 |------|------|
 | [CONTEXT.md](CONTEXT.md) | Stack, rules, architecture |
 | [AGENTS.md](AGENTS.md) | Agent workflow + Spine |
-| [SPEC.md](SPEC.md) | v1 acceptance |
-| [PLAN.md](PLAN.md) | Current scaffold plan |
-| [ROADMAP.md](ROADMAP.md) | Next slices |
+| [SPEC.md](SPEC.md) | Acceptance |
+| [ROADMAP.md](ROADMAP.md) | Next slices (layouts, view modes, CI) |
 | [MCP.md](MCP.md) | Intent → MCP routing |
 | [docs/adr/](docs/adr/) | Decisions |
 

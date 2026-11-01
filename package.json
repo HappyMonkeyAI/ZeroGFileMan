@@ -22,6 +22,7 @@
     "test": "vitest run",
     "start": "node scripts/start-electron.mjs",
     "start:electron-cli": "electron .",
+    "package:win": "npm run build && electron-builder --win nsis portable --x64 --publish never",
     "ci": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
@@ -36,6 +37,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^9.2.1",
     "electron": "^43.3.0",
+    "electron-builder": "^26.18.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.6",
     "vitest": "^3.2.7"
@@ -44,12 +46,22 @@
     "appId": "com.happymonkeyai.zerogfileman",
     "productName": "ZeroG FileMan",
     "asar": true,
+    "directories": {
+      "output": "release"
+    },
     "files": [
-      "dist/**/*",
+      "dist/main/**/*",
+      "dist/renderer/**/*",
       "package.json"
     ],
     "win": {
       "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
         {
           "target": "portable",
           "arch": [
@@ -58,6 +70,15 @@
         }
       ],
       "signAndEditExecutable": false
+    },
+    "nsis": {
+      "artifactName": "ZeroGFileMan-${version}-Setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "portable": {
+      "artifactName": "ZeroGFileMan-${version}-Portable.${ext}"
     }
   }
 }
