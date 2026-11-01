@@ -23,7 +23,7 @@ Light / Nord / Dracula remain alternate `data-theme` skins; deck is default dark
 
 ## Layout
 
-1. Native Electron menu (File/Edit/View/…) — no fake macOS traffic lights on Windows  
+1. No native menu bar on Windows/Linux (deck chrome is the top surface); macOS keeps an application menu. No fake traffic lights.  
 2. Compact brand + status strip (optional global jump later)  
 3. Master toolbar: nav · CRUD · clipboard · launchers · toggles  
 4. Dual panes: ACTIVE/TARGET badges, breadcrumbs, filter, mono listing, pane footer  

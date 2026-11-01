@@ -177,5 +177,12 @@ export function installApplicationMenu(getWindow: () => BrowserWindow | undefine
     }
   ];
 
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  // Windows/Linux: hide the native menu bar so the in-app deck chrome is the
+  // top surface (Stitch Pro Commander). Keep the template wired for macOS,
+  // which expects an application menu, and for a future Alt-to-show option.
+  if (process.platform === 'darwin') {
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  } else {
+    Menu.setApplicationMenu(null);
+  }
 }

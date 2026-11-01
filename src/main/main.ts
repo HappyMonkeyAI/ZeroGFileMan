@@ -26,7 +26,8 @@ function createWindow(): void {
     height: 860,
     minWidth: 960,
     minHeight: 600,
-    backgroundColor: '#0f1419',
+    backgroundColor: '#070b12',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(root, 'dist', 'main', 'preload.cjs'),
       contextIsolation: true,
