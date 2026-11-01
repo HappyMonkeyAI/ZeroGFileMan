@@ -326,6 +326,12 @@ export function Icon({ name, className = '' }: { name: string; className?: strin
           <path d="M12 8h.01" />
         </svg>
       );
+    case 'star':
+      return (
+        <svg {...common}>
+          <path d="M12 3.5l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.9 7.2 18.4l.9-5.4-3.9-3.8 5.4-.8L12 3.5z" />
+        </svg>
+      );
     default:
       return <span className="icon" aria-hidden="true">•</span>;
   }

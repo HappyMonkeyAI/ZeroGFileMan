@@ -24,6 +24,8 @@ export type MenuCommand =
   | 'view:theme-dracula'
   | 'window:focus-left'
   | 'window:focus-right'
+  | 'go:jump'
+  | 'go:add-favorite'
   | 'voice:navigate'
   | 'voice:action'
   | 'help:about';
@@ -157,6 +159,21 @@ export function installApplicationMenu(getWindow: () => BrowserWindow | undefine
           label: 'Action (active pane)',
           accelerator: 'CmdOrCtrl+Shift+A',
           click: () => send(getWindow(), 'voice:action')
+        }
+      ]
+    },
+    {
+      label: 'Go',
+      submenu: [
+        {
+          label: 'Global Jump',
+          accelerator: 'CmdOrCtrl+K',
+          click: () => send(getWindow(), 'go:jump')
+        },
+        {
+          label: 'Add Current Path to Favorites',
+          accelerator: 'CmdOrCtrl+D',
+          click: () => send(getWindow(), 'go:add-favorite')
         }
       ]
     },

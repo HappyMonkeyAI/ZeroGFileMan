@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installApplicationMenu } from './app-menu.js';
+import { addFavorite, listFavorites, removeFavorite } from './favorites-store.js';
 import {
   copyLocalEntry,
   createLocalDirectory,
@@ -53,6 +54,9 @@ function asKind(value: unknown): FileEntry['kind'] {
 }
 
 ipcMain.handle('fs:home', () => localHome());
+ipcMain.handle('favorites:list', () => listFavorites());
+ipcMain.handle('favorites:add', (_e, path: unknown, label?: unknown) => addFavorite(path, label));
+ipcMain.handle('favorites:remove', (_e, path: unknown) => removeFavorite(path));
 ipcMain.handle('fs:list', (_e, path?: unknown) =>
   listLocalDirectory(typeof path === 'string' ? path : undefined)
 );

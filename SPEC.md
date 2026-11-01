@@ -16,7 +16,7 @@ Local dual-pane file browser for developers with push-to-talk **Navigate** and *
 | M6 | Cross-pane clipboard: Copy/Cut in one pane, Paste in the other |
 | M7 | Navigate jewel: demo/server transcript → current listing fuzzy, else depth-2 shallow index; Auto-nav toggle |
 | M8 | Action jewel: copy path / copy / cut / paste / delete / rename / new folder / open / notepad / cursor / terminal / reveal / refresh |
-| M9 | Favorites jump (Home / Documents / development when present) |
+| M9 | Favorites jump (Home / Documents / development when present); add/remove; persist in userData |
 | M10 | `typecheck`, unit tests, and `build` pass |
 
 ## Voice modes

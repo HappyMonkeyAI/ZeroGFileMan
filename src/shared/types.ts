@@ -1,3 +1,7 @@
+import type { Favorite } from './favorites.js';
+
+export type { Favorite };
+
 export interface FileEntry {
   name: string;
   kind: 'file' | 'directory' | 'symlink';
@@ -45,6 +49,9 @@ export interface FileManApi {
   copyLocalEntry(from: string, toDir: string): Promise<string>;
   moveLocalEntry(from: string, toDir: string): Promise<string>;
   homeDirectory(): Promise<string>;
+  listFavorites(): Promise<Favorite[]>;
+  addFavorite(path: string, label?: string): Promise<Favorite[]>;
+  removeFavorite(path: string): Promise<Favorite[]>;
   copyText(text: string): Promise<void>;
   openPath(path: string): Promise<void>;
   showItemInFolder(path: string): Promise<void>;

@@ -20,6 +20,7 @@ import {
   stepForward,
   type HistoryState
 } from '../shared/pane-history.js';
+import { isFavoritePath, type Favorite } from '../shared/favorites.js';
 import type { FileEntry, SpeechSettings, VoiceMode } from '../shared/types.js';
 import { Icon } from './icons.js';
 import { DEFAULT_SPEECH, SpeechClient } from './speech.js';
@@ -70,6 +71,7 @@ type PaneCommands = {
   parent: () => void;
   back: () => void;
   forward: () => void;
+  navigateFuzzy: (query: string) => void;
   voiceNavigate: () => void;
   voiceAction: () => void;
 };
@@ -512,12 +514,14 @@ function FilePane(props: {
       parent: () => void navigateTo(parentLocal(pane.path)),
       back: () => void goBack(),
       forward: () => void goForward(),
+      navigateFuzzy: (query: string) => void applyNavigate(query),
       voiceNavigate: () => void toggleJewel('navigate'),
       voiceAction: () => void toggleJewel('action')
     });
     return () => onRegisterCommands(null);
   }, [
     active,
+    applyNavigate,
     doCopyClip,
     doDelete,
     doNewFolder,
@@ -657,6 +661,13 @@ function FilePane(props: {
   );
 }
 
+function looksLikeAbsolutePath(query: string): boolean {
+  if (query === '~' || query.startsWith('~/') || query.startsWith('~\\')) return true;
+  if (/^[a-zA-Z]:[\\/]/.test(query)) return true;
+  if (query.startsWith('\\\\') || query.startsWith('/')) return true;
+  return false;
+}
+
 function App() {
   const [left, setLeft] = useState<PaneState | null>(null);
   const [right, setRight] = useState<PaneState | null>(null);
@@ -664,12 +675,15 @@ function App() {
   const [showHidden, setShowHidden] = useState(false);
   const [autoNavigate, setAutoNavigate] = useState(true);
   const [theme, setTheme] = useState<ThemeId>(() => loadStoredTheme());
+  const [jumpQuery, setJumpQuery] = useState('');
   const [demoText, setDemoText] = useState('zerogfileman');
   const [speechSettings, setSpeechSettings] = useState<SpeechSettings>(DEFAULT_SPEECH);
   const [clipboard, setClipboard] = useState<FileClip | null>(null);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [log, setLog] = useState<string[]>([`[${stamp()}] ZeroG FileMan ready · dual commander`]);
   const leftCommands = useRef<PaneCommands | null>(null);
   const rightCommands = useRef<PaneCommands | null>(null);
+  const jumpInputRef = useRef<HTMLInputElement | null>(null);
 
   const pushLog = useCallback((message: string) => {
     setLog((prev) => [...prev.slice(-40), message]);
@@ -681,6 +695,62 @@ function App() {
   }, [theme]);
 
   const cmds = () => (active === 'left' ? leftCommands.current : rightCommands.current);
+
+  const focusJump = useCallback(() => {
+    jumpInputRef.current?.focus();
+    jumpInputRef.current?.select();
+  }, []);
+
+  const goActive = useCallback(
+    async (path: string) => {
+      const setter = active === 'left' ? setLeft : setRight;
+      try {
+        const next = await loadPane(path);
+        setter((prev) => {
+          if (!prev) return prev;
+          const hist = pushPath(historyOf(prev), next.path);
+          return {
+            ...prev,
+            ...next,
+            ...hist,
+            selected: null,
+            matchNames: new Set(),
+            status: next.path,
+            listening: null
+          };
+        });
+        pushLog(`[${stamp()}] jump → ${next.path}`);
+      } catch (error) {
+        pushLog(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [active, pushLog]
+  );
+
+  const addCurrentFavorite = useCallback(async () => {
+    const pane = active === 'left' ? left : right;
+    if (!pane) return;
+    try {
+      const next = await api().addFavorite(pane.path);
+      setFavorites(next);
+      pushLog(`[${stamp()}] favorite + ${pane.path}`);
+    } catch (error) {
+      pushLog(error instanceof Error ? error.message : String(error));
+    }
+  }, [active, left, pushLog, right]);
+
+  const removeFavoriteChip = useCallback(
+    async (path: string) => {
+      try {
+        const next = await api().removeFavorite(path);
+        setFavorites(next);
+        pushLog(`[${stamp()}] favorite − ${path}`);
+      } catch (error) {
+        pushLog(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [pushLog]
+  );
 
   const refreshSide = useCallback((side: 'left' | 'right') => {
     const setter = side === 'left' ? setLeft : setRight;
@@ -703,9 +773,14 @@ function App() {
         } catch {
           /* home */
         }
-        const [l, r] = await Promise.all([loadPane(leftPath), loadPane(home)]);
+        const [l, r, favs] = await Promise.all([
+          loadPane(leftPath),
+          loadPane(home),
+          api().listFavorites()
+        ]);
         const leftHist = initialHistory(l.path);
         const rightHist = initialHistory(r.path);
+        setFavorites(favs);
         setLeft({
           ...l,
           ...leftHist,
@@ -733,6 +808,16 @@ function App() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        focusJump();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
+        event.preventDefault();
+        void addCurrentFavorite();
+        return;
+      }
       const target = event.target as HTMLElement | null;
       const typing =
         target &&
@@ -786,7 +871,7 @@ function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active]);
+  }, [active, addCurrentFavorite, focusJump]);
 
   useEffect(() => {
     return api().onMenuCommand((command) => {
@@ -854,6 +939,12 @@ function App() {
         case 'window:focus-right':
           setActive('right');
           break;
+        case 'go:jump':
+          focusJump();
+          break;
+        case 'go:add-favorite':
+          void addCurrentFavorite();
+          break;
         case 'voice:navigate':
           c?.voiceNavigate();
           break;
@@ -867,15 +958,20 @@ function App() {
           break;
       }
     });
-  }, [active, pushLog]);
+  }, [active, addCurrentFavorite, focusJump, pushLog]);
 
   const runGlobalJump = async () => {
-    const q = demoText.trim();
+    const q = jumpQuery.trim();
     if (!q) return;
-    const pane = active === 'left' ? left : right;
-    if (!pane) return;
-    cmds()?.voiceNavigate();
+    if (looksLikeAbsolutePath(q)) {
+      await goActive(q);
+      return;
+    }
+    cmds()?.navigateFuzzy(q);
   };
+
+  const activePath = (active === 'left' ? left : right)?.path ?? '';
+  const activeIsFavorite = isFavoritePath(favorites, activePath);
 
   if (!left || !right) {
     return (
@@ -905,15 +1001,19 @@ function App() {
         <div className="global-jump">
           <Icon name="spark" />
           <input
-            value={demoText}
-            onChange={(e) => setDemoText(e.target.value)}
+            ref={jumpInputRef}
+            value={jumpQuery}
+            onChange={(e) => setJumpQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void runGlobalJump();
+              if (e.key === 'Escape') {
+                (e.target as HTMLInputElement).blur();
+              }
             }}
-            placeholder="Global jump / fuzzy locator…"
+            placeholder="Jump path or fuzzy…"
             aria-label="Global jump"
           />
-          <span className="kbd">⌘K</span>
+          <span className="kbd">Ctrl+K</span>
         </div>
         <select
           value={theme}
@@ -936,6 +1036,50 @@ function App() {
           <option value="dracula">Dracula</option>
         </select>
       </header>
+
+      <section className="favorites-bar" aria-label="Favorites">
+        <span className="favorites-label">
+          <Icon name="star" /> Fav
+        </span>
+        <div className="favorites-chips">
+          {favorites.map((fav) => (
+            <button
+              key={fav.path}
+              type="button"
+              className={`fav-chip${fav.path.toLowerCase() === activePath.toLowerCase() ? ' current' : ''}`}
+              title={fav.path}
+              onClick={() => void goActive(fav.path)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                void removeFavoriteChip(fav.path);
+              }}
+            >
+              <span>{fav.label}</span>
+              <span
+                className="fav-remove"
+                role="button"
+                tabIndex={-1}
+                title="Remove favorite"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void removeFavoriteChip(fav.path);
+                }}
+              >
+                ×
+              </span>
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="fav-add"
+          title={activeIsFavorite ? 'Current path already favorited (Ctrl+D)' : 'Add current path (Ctrl+D)'}
+          disabled={!activePath || activeIsFavorite}
+          onClick={() => void addCurrentFavorite()}
+        >
+          <Icon name="plus" /> Add
+        </button>
+      </section>
 
       <section className="master-toolbar">
         <div className="tool-groups">
@@ -1046,8 +1190,8 @@ function App() {
             engine: {speechSettings.engine}
           </span>
           <span>
-            <span className="kbd">Tab</span> pane · <span className="kbd">F5</span> copy→ · <span className="kbd">F6</span>{' '}
-            move→ · <span className="kbd">Alt+←/→</span> history
+            <span className="kbd">Tab</span> pane · <span className="kbd">Ctrl+K</span> jump ·{' '}
+            <span className="kbd">Ctrl+D</span> fav · <span className="kbd">F5/F6</span> copy/move→
           </span>
         </div>
         <div className="transcript-log">

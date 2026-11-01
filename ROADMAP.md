@@ -18,6 +18,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | D6 | Themes + icons | Deck / Light / Nord / Dracula; Term-style SVG icons |
 | D7 | Hide native menu (Win) | Deck chrome is top surface; macOS keeps app menu |
 | D8 | P0 + history + copy→other | Menu hide, start script, Back/Forward, F5/F6 to other pane (ADR-0004) |
+| D9 | Favorites + Ctrl+K jump | userData favorites; brand-bar jump + fuzzy Enter |
 
 ## Near-term (ordered)
 
@@ -37,8 +38,8 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | P1.2 | Tab switches active pane | Tab focus LEFT ↔ RIGHT | done |
 | P1.3 | F-keys like classic commanders | F2 rename, F5 copy→, F6 move→, F7 mkdir, Del | done (ADR-0004) |
 | P1.4 | Copy/Move **to other pane** | Copy → / Move → toolbar + F5/F6 | done |
-| P1.5 | Editable favorites | Persist bookmarks in userData | open |
-| P1.6 | Global jump (⌘K / Ctrl+K) | Focus brand-bar search; Enter → Navigate | open (input exists; Ctrl+K focus TBD) |
+| P1.5 | Editable favorites | Persist bookmarks in userData | done |
+| P1.6 | Global jump (⌘K / Ctrl+K) | Focus brand-bar search; Enter → Navigate | done |
 
 ### P2 — Voice that works offline
 
@@ -78,7 +79,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 
 ## Suggested next slice
 
-**P1.5 editable favorites**, then **P2.1 builtin Whisper**, then **P4.1 packaging**.
+**P2.1 builtin Whisper**, then **P4.1 packaging**, then **P3.1 layouts**.
 
 ## Task board seed
 
