@@ -23,6 +23,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | D11 | Speech settings + safeStorage key | Precision/device/silence/max; server key encrypted |
 | D12 | Jewel UX polish | Click-toggle + hold PTT; Esc cancel; bus listening state |
 | D13 | Windows packaging | electron-builder NSIS + portable → `release/` |
+| D14 | Listing view modes | Details / Icons / Thumbnails + Ctrl+wheel scale; thumb caps |
 
 ## Near-term (ordered)
 
@@ -61,7 +62,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | P3.2 | Optional 4-pane grid | Only after dual layouts feel solid | open |
 | P3.3 | Collapsible transcript drawer | Height persist; collapse to one status line | open |
 | P3.4 | Column sort | Name / size / modified click-to-sort; persist per pane | open |
-| P3.5 | Listing view modes | Explorer-style **Details** / **Icons** / **Thumbnails**; per-pane toolbar; **Ctrl+wheel** zooms icon/thumbnail size | open — review candidate |
+| P3.5 | Listing view modes | Explorer-style **Details** / **Icons** / **Thumbnails**; per-pane toolbar; **Ctrl+wheel** zooms icon/thumbnail size | done |
 
 ### P4 — Packaging & polish
 
@@ -88,7 +89,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 
 ## Suggested next slice
 
-**Owner review**, then **P3.5 view modes** and/or **P3.1 layouts**; **P4.2** icon; **P4.4** CI.
+**P3.1 layouts**, then **P4.2** icon / **P4.4** CI.
 
 ## Task board seed
 

@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('fileman', {
   listLocalDirectory: (path) => ipcRenderer.invoke('fs:list', path),
   searchLocalShallow: (path, maxDepth) => ipcRenderer.invoke('fs:search', path, maxDepth),
+  readThumbnail: (path, maxEdge) => ipcRenderer.invoke('fs:thumbnail', path, maxEdge),
   createLocalDirectory: (path) => ipcRenderer.invoke('fs:mkdir', path),
   renameLocalEntry: (from, to) => ipcRenderer.invoke('fs:rename', from, to),
   removeLocalEntry: (path, kind) => ipcRenderer.invoke('fs:remove', path, kind),

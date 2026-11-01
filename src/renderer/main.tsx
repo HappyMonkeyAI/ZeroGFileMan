@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent
 } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -29,9 +30,17 @@ import {
   type HistoryState
 } from '../shared/pane-history.js';
 import { isFavoritePath, type Favorite } from '../shared/favorites.js';
+import {
+  iconPixelSize,
+  isThumbnailCandidate,
+  stepViewScale,
+  thumbPixelSize,
+  type ListingViewMode
+} from '../shared/listing-view.js';
 import type { FileEntry, SpeechApiKeyStatus, SpeechSettings, VoiceMode } from '../shared/types.js';
 import { shouldStopJewelOnRelease } from '../shared/voice-jewel.js';
 import { Icon } from './icons.js';
+import { loadStoredListingPrefs, storeListingPrefs } from './listing-prefs.js';
 import { SpeechClient, type SpeechWorker } from './speech.js';
 import {
   describeDownload,
@@ -53,6 +62,63 @@ import './styles.css';
 
 type VoicePhase = 'idle' | 'listening' | 'transcribing';
 
+const thumbCache = new Map<string, string | null>();
+
+function EntryThumbnail(props: {
+  path: string;
+  name: string;
+  size: number;
+  kind: FileEntry['kind'];
+  edge: number;
+  fallbackIcon: string;
+}) {
+  const { path, name, size, kind, edge, fallbackIcon } = props;
+  const eligible = isThumbnailCandidate(name, size, kind);
+  const [src, setSrc] = useState<string | null>(() =>
+    eligible ? (thumbCache.get(path) ?? null) : null
+  );
+  const [failed, setFailed] = useState(() => eligible && thumbCache.get(path) === null);
+
+  useEffect(() => {
+    if (!eligible || failed) return;
+    const cached = thumbCache.get(path);
+    if (cached !== undefined) {
+      setSrc(cached);
+      setFailed(cached === null);
+      return;
+    }
+    let cancelled = false;
+    void api()
+      .readThumbnail(path, Math.max(64, edge * 2))
+      .then((result) => {
+        const next = result?.dataUrl ?? null;
+        thumbCache.set(path, next);
+        if (cancelled) return;
+        setSrc(next);
+        setFailed(next === null);
+      })
+      .catch(() => {
+        thumbCache.set(path, null);
+        if (!cancelled) {
+          setSrc(null);
+          setFailed(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [eligible, edge, failed, path]);
+
+  if (src) {
+    return <img className="tile-thumb" src={src} alt="" width={edge} height={edge} draggable={false} />;
+  }
+  return (
+    <span className="tile-fallback" style={{ width: edge, height: edge }}>
+      <Icon name={fallbackIcon} />
+    </span>
+  );
+}
+
 const speech = new SpeechClient({
   createWorker: () =>
     new Worker(new URL('./voice-worker.ts', import.meta.url), {
@@ -71,6 +137,8 @@ type PaneState = {
   filter: string;
   history: string[];
   historyIndex: number;
+  viewMode: ListingViewMode;
+  viewScale: number;
 };
 
 type FileClip = {
@@ -789,49 +857,140 @@ function FilePane(props: {
               value={pane.filter}
               onChange={(e) => onChange({ ...pane, filter: e.target.value })}
               placeholder="Filter current view…"
-              aria-label={`${side} filter`}
+              aria-label="Filter"
             />
+          </div>
+          <div className="view-toggle" role="group" aria-label="Listing view">
+            {(
+              [
+                ['details', 'list', 'Details'],
+                ['icons', 'grid', 'Icons'],
+                ['thumbnails', 'image', 'Thumbnails']
+              ] as const
+            ).map(([mode, icon, label]) => (
+              <button
+                key={mode}
+                type="button"
+                className={`view-btn${pane.viewMode === mode ? ' active' : ''}`}
+                title={`${label}${mode !== 'details' ? ' · Ctrl+wheel zoom' : ''}`}
+                aria-pressed={pane.viewMode === mode}
+                onClick={() => {
+                  const next = { ...pane, viewMode: mode };
+                  onChange(next);
+                  storeListingPrefs({ mode, scale: pane.viewScale });
+                }}
+              >
+                <Icon name={icon} />
+              </button>
+            ))}
           </div>
         </div>
       </div>
-      <div className="entry-heading">
-        <span>Name</span>
-        <span style={{ textAlign: 'right' }}>Size</span>
-        <span style={{ textAlign: 'right' }}>Modified</span>
-      </div>
-      <div className="listing">
-        <button type="button" className="entry" onDoubleClick={() => void navigateTo(parentLocal(pane.path))}>
-          <span className="name dir">
-            <Icon name="level-up" />
-            ..
-          </span>
-          <span className="meta">—</span>
-          <span className="meta">—</span>
+      {pane.viewMode === 'details' ? (
+        <div className="entry-heading">
+          <span>Name</span>
+          <span style={{ textAlign: 'right' }}>Size</span>
+          <span style={{ textAlign: 'right' }}>Modified</span>
+        </div>
+      ) : null}
+      <div
+        className={`listing listing-${pane.viewMode}`}
+        style={
+          pane.viewMode === 'details'
+            ? undefined
+            : ({
+                '--tile-size': `${pane.viewMode === 'thumbnails' ? thumbPixelSize(pane.viewScale) : iconPixelSize(pane.viewScale)}px`
+              } as CSSProperties)
+        }
+        onWheel={(event) => {
+          if (!(event.ctrlKey || event.metaKey)) return;
+          event.preventDefault();
+          const nextScale = stepViewScale(pane.viewScale, event.deltaY < 0 ? 1 : -1);
+          if (nextScale === pane.viewScale) return;
+          const nextMode = pane.viewMode === 'details' ? 'icons' : pane.viewMode;
+          onChange({ ...pane, viewMode: nextMode, viewScale: nextScale });
+          storeListingPrefs({ mode: nextMode, scale: nextScale });
+        }}
+      >
+        <button
+          type="button"
+          className={pane.viewMode === 'details' ? 'entry' : 'tile'}
+          onDoubleClick={() => void navigateTo(parentLocal(pane.path))}
+        >
+          {pane.viewMode === 'details' ? (
+            <>
+              <span className="name dir">
+                <Icon name="level-up" />
+                ..
+              </span>
+              <span className="meta">—</span>
+              <span className="meta">—</span>
+            </>
+          ) : (
+            <>
+              <span className="tile-fallback" style={{ width: 'var(--tile-size)', height: 'var(--tile-size)' }}>
+                <Icon name="level-up" />
+              </span>
+              <span className="tile-label">..</span>
+            </>
+          )}
         </button>
         {visible.map((entry) => {
           const selected = pane.selected === entry.name;
           const match = pane.matchNames.has(entry.name);
           const kindIcon = entry.kind === 'directory' ? 'folder' : entry.kind === 'symlink' ? 'link' : 'file';
+          const fullPath = joinLocal(pane.path, entry.name);
+          const openEntry = () => {
+            if (entry.kind === 'directory' || entry.kind === 'symlink') {
+              void navigateTo(fullPath);
+            } else {
+              void api().openPath(fullPath);
+            }
+          };
+          if (pane.viewMode === 'details') {
+            return (
+              <button
+                key={entry.name}
+                type="button"
+                className={`entry${selected ? ' selected' : ''}${match ? ' match' : ''}`}
+                onClick={() => onChange({ ...pane, selected: entry.name })}
+                onDoubleClick={openEntry}
+              >
+                <span className={`name${entry.kind === 'directory' ? ' dir' : ''}`}>
+                  <Icon name={kindIcon} />
+                  {entry.name}
+                </span>
+                <span className="meta">{formatSize(entry)}</span>
+                <span className="meta">{formatModified(entry.modified)}</span>
+              </button>
+            );
+          }
+          const edge =
+            pane.viewMode === 'thumbnails' ? thumbPixelSize(pane.viewScale) : iconPixelSize(pane.viewScale);
           return (
             <button
               key={entry.name}
               type="button"
-              className={`entry${selected ? ' selected' : ''}${match ? ' match' : ''}`}
+              className={`tile${selected ? ' selected' : ''}${match ? ' match' : ''}`}
+              title={`${entry.name}\n${formatSize(entry)}`}
               onClick={() => onChange({ ...pane, selected: entry.name })}
-              onDoubleClick={() => {
-                if (entry.kind === 'directory' || entry.kind === 'symlink') {
-                  void navigateTo(joinLocal(pane.path, entry.name));
-                } else {
-                  void api().openPath(joinLocal(pane.path, entry.name));
-                }
-              }}
+              onDoubleClick={openEntry}
             >
-              <span className={`name${entry.kind === 'directory' ? ' dir' : ''}`}>
-                <Icon name={kindIcon} />
-                {entry.name}
-              </span>
-              <span className="meta">{formatSize(entry)}</span>
-              <span className="meta">{formatModified(entry.modified)}</span>
+              {pane.viewMode === 'thumbnails' && isThumbnailCandidate(entry.name, entry.size, entry.kind) ? (
+                <EntryThumbnail
+                  path={fullPath}
+                  name={entry.name}
+                  size={entry.size}
+                  kind={entry.kind}
+                  edge={edge}
+                  fallbackIcon={kindIcon}
+                />
+              ) : (
+                <span className="tile-fallback" style={{ width: edge, height: edge }}>
+                  <Icon name={kindIcon} />
+                </span>
+              )}
+              <span className={`tile-label${entry.kind === 'directory' ? ' dir' : ''}`}>{entry.name}</span>
             </button>
           );
         })}
@@ -995,6 +1154,7 @@ function App() {
         ]);
         const leftHist = initialHistory(l.path);
         const rightHist = initialHistory(r.path);
+        const listing = loadStoredListingPrefs();
         setFavorites(favs);
         setLeft({
           ...l,
@@ -1003,7 +1163,9 @@ function App() {
           matchNames: new Set(),
           status: l.path,
           listening: null,
-          filter: ''
+          filter: '',
+          viewMode: listing.mode,
+          viewScale: listing.scale
         });
         setRight({
           ...r,
@@ -1012,7 +1174,9 @@ function App() {
           matchNames: new Set(),
           status: r.path,
           listening: null,
-          filter: ''
+          filter: '',
+          viewMode: listing.mode,
+          viewScale: listing.scale
         });
         pushLog(`[${stamp()}] Panes: ${l.path} | ${r.path}`);
       } catch (error) {
@@ -1338,6 +1502,44 @@ function App() {
                 const pane = active === 'left' ? left : right;
                 const target = pane.selected ? joinLocal(pane.path, pane.selected) : pane.path;
                 void api().openWith(target, 'cursor');
+              }}
+            />
+          </div>
+          <div className="tool-group" role="group" aria-label="Active pane view">
+            <ToolButton
+              icon="list"
+              title="Details view"
+              onClick={() => {
+                const setter = active === 'left' ? setLeft : setRight;
+                setter((prev) => {
+                  if (!prev) return prev;
+                  storeListingPrefs({ mode: 'details', scale: prev.viewScale });
+                  return { ...prev, viewMode: 'details' };
+                });
+              }}
+            />
+            <ToolButton
+              icon="grid"
+              title="Icons view (Ctrl+wheel zoom)"
+              onClick={() => {
+                const setter = active === 'left' ? setLeft : setRight;
+                setter((prev) => {
+                  if (!prev) return prev;
+                  storeListingPrefs({ mode: 'icons', scale: prev.viewScale });
+                  return { ...prev, viewMode: 'icons' };
+                });
+              }}
+            />
+            <ToolButton
+              icon="image"
+              title="Thumbnails view (Ctrl+wheel zoom)"
+              onClick={() => {
+                const setter = active === 'left' ? setLeft : setRight;
+                setter((prev) => {
+                  if (!prev) return prev;
+                  storeListingPrefs({ mode: 'thumbnails', scale: prev.viewScale });
+                  return { ...prev, viewMode: 'thumbnails' };
+                });
               }}
             />
           </div>

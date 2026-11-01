@@ -56,9 +56,16 @@ export type SpeechApiKeyStatus = {
   sessionOnly: boolean;
 };
 
+export type ThumbnailResult = {
+  dataUrl: string;
+  width: number;
+  height: number;
+};
+
 export interface FileManApi {
   listLocalDirectory(path?: string): Promise<DirectoryListing>;
   searchLocalShallow(path: string, maxDepth?: number): Promise<SearchHit[]>;
+  readThumbnail(path: string, maxEdge?: number): Promise<ThumbnailResult | null>;
   createLocalDirectory(path: string): Promise<void>;
   renameLocalEntry(from: string, to: string): Promise<void>;
   removeLocalEntry(path: string, kind: FileEntry['kind']): Promise<void>;

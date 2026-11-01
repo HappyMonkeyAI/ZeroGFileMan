@@ -332,6 +332,21 @@ export function Icon({ name, className = '' }: { name: string; className?: strin
           <path d="M12 3.5l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.9 7.2 18.4l.9-5.4-3.9-3.8 5.4-.8L12 3.5z" />
         </svg>
       );
+    case 'image':
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <circle cx="9" cy="10" r="1.5" />
+          <path d="M4 16l4.5-4 3 3 3.5-4.5L20 16" />
+        </svg>
+      );
+    case 'list':
+      return (
+        <svg {...common}>
+          <path d="M8 7h12M8 12h12M8 17h12" />
+          <path d="M4 7h.01M4 12h.01M4 17h.01" />
+        </svg>
+      );
     default:
       return <span className="icon" aria-hidden="true">•</span>;
   }

@@ -17,6 +17,7 @@ import {
   searchLocalShallow
 } from './local-fs.js';
 import { defaultSecretsPath, SecretStore, SPEECH_API_KEY } from './secret-store.js';
+import { readThumbnail } from './thumbnails.js';
 import type { FileEntry, SpeechApiKeyStatus } from '../shared/types.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -79,6 +80,9 @@ ipcMain.handle('fs:list', (_e, path?: unknown) =>
 );
 ipcMain.handle('fs:search', (_e, path: unknown, maxDepth?: unknown) =>
   searchLocalShallow(String(path), typeof maxDepth === 'number' ? maxDepth : 2)
+);
+ipcMain.handle('fs:thumbnail', (_e, path: unknown, maxEdge?: unknown) =>
+  readThumbnail(path, typeof maxEdge === 'number' ? maxEdge : 256)
 );
 ipcMain.handle('fs:mkdir', (_e, path: unknown) => createLocalDirectory(String(path)));
 ipcMain.handle('fs:rename', (_e, from: unknown, to: unknown) =>

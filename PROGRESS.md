@@ -2,25 +2,18 @@
 
 ## Current
 
-P4.1 + P4.3 done. Ready for an owner review pass; P3.5 view modes queued from that feedback.
+P3.5 listing view modes done (Details / Icons / Thumbnails + Ctrl+wheel).
 
 ## Delivered
 
-- P0–P2 commander + voice stack
-- `npm run package:win` → `release/ZeroGFileMan-0.1.0-Setup.exe` + `…-Portable.exe`
-- README quickstart for dev + packaged builds
-
-## Notes for review
-
-- **P3.5 view modes** — Details (now) / Icons / Thumbnails, Explorer-style toolbar toggle, per pane
-- Default Electron icon until P4.2
-- Unsigned Windows builds (`signAndEditExecutable: false`)
+- Commander + voice + packaging
+- Per-pane view toggle; Ctrl+wheel scales icons/thumbnails (switches out of Details into Icons)
+- Thumbnails via Electron `nativeImage` with ext + 8MB cap
 
 ## Next
 
-- Owner review
-- P3.5 view modes and/or P3.1 layouts
-- P4.2 icon, P4.4 CI
+- P3.1 layouts
+- P4.2 icon / P4.4 CI
 
 ## Blockers
 
