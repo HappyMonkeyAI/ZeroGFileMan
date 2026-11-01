@@ -10,4 +10,4 @@ updated: 2026-11-01
 ---
 # Explorer-style listing view modes
 
-Owner wants Windows Explorer–like view switching (Details / Icons / Thumbnails) via a toolbar control, per pane. Captured as ROADMAP P3.5 for a review pass — not built yet. Thumbnails need size/type decode caps. Details remains the current listing.
+Owner wants Windows Explorer–like view switching (Details / Icons / Thumbnails) via a toolbar control, per pane, plus Ctrl+mouse-wheel to grow/shrink icon and thumbnail size. Captured as ROADMAP P3.5. Thumbnails need size/type decode caps. Details remains the current listing. Pane chrome uses Active/Idle — no Left/Right labels.

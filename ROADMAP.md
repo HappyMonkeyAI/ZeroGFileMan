@@ -61,7 +61,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | P3.2 | Optional 4-pane grid | Only after dual layouts feel solid | open |
 | P3.3 | Collapsible transcript drawer | Height persist; collapse to one status line | open |
 | P3.4 | Column sort | Name / size / modified click-to-sort; persist per pane | open |
-| P3.5 | Listing view modes | Explorer-style toggle: **Details** (current) / **Icons** / **Thumbnails**; per-pane, toolbar control | open — review candidate |
+| P3.5 | Listing view modes | Explorer-style **Details** / **Icons** / **Thumbnails**; per-pane toolbar; **Ctrl+wheel** zooms icon/thumbnail size | open — review candidate |
 
 ### P4 — Packaging & polish
 
@@ -78,6 +78,8 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 - Recursive delete with explicit danger modal (default stays non-recursive)  
 - Permissions / owner columns (platform-accurate, not fake Unix on NTFS)  
 - Thumbnail generation caps (size/type allowlist; no decode of huge RAW by default)  
+- Pane chrome stays Active/Idle (no Left/Right labels) — spatial layout is enough  
+
 - SFTP pane (borrow SFTP / Term patterns)  
 - Shared `@zerog/speech` / `@zerog/workspace-layout` packages  
 - spine-design UI baselines  

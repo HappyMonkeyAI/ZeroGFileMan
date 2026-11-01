@@ -212,9 +212,9 @@ function FilePane(props: {
 
   const bus = useCallback(
     (message: string) => {
-      onLog(`[${stamp()}] ${side.toUpperCase()} ${message}`);
+      onLog(`[${stamp()}] ${message}`);
     },
-    [onLog, side]
+    [onLog]
   );
 
   const navigateTo = useCallback(
@@ -729,11 +729,11 @@ function FilePane(props: {
       <div className="pane-head">
         <div className="pane-head-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <span className={`badge${active ? ' active' : ' idle'}`}>
+            <span className={`badge${active ? ' active' : ' idle'}`} title={active ? 'Active pane' : 'Other pane'}>
               {active ? <span className="pulse" /> : <span className="pulse" style={{ background: '#64748b', animation: 'none' }} />}
-              {side === 'left' ? 'LEFT' : 'RIGHT'} {active ? '(ACTIVE)' : '(TARGET)'}
+              {active ? 'Active' : 'Idle'}
             </span>
-            <nav className="breadcrumbs" aria-label={`${side} path`}>
+            <nav className="breadcrumbs" aria-label={active ? 'Active pane path' : 'Other pane path'}>
               {crumbs.map((crumb, index) => (
                 <span key={crumb.path}>
                   {index > 0 ? <span className="crumb-sep">/</span> : null}
@@ -752,7 +752,6 @@ function FilePane(props: {
             <button type="button" className="pill" title="Terminal here" onClick={() => void api().openWith(pane.path, 'terminal')}>
               <Icon name="terminal" />
             </button>
-            <span className={`pill${active ? ' lit' : ''}`}>{side === 'left' ? 'L' : 'R'}</span>
             <div className="jewels">
               <button
                 type="button"
@@ -1640,20 +1639,20 @@ function App() {
       </section>
 
       <footer className="statusbar">
-        <div className="cluster">
+        <div className="cluster" title="Pane item counts (lit = active)">
           <span>
-            <span className={`dot ${active === 'left' ? 'on' : 'off'}`} /> Left: <em>{left.entries.length}</em>
+            <span className={`dot ${active === 'left' ? 'on' : 'off'}`} /> <em>{left.entries.length}</em>
           </span>
           <span>|</span>
           <span>
-            <span className={`dot ${active === 'right' ? 'on' : 'off'}`} /> Right: <em>{right.entries.length}</em>
+            <span className={`dot ${active === 'right' ? 'on' : 'off'}`} /> <em>{right.entries.length}</em>
           </span>
         </div>
         <div className="cluster">
           jewels: click toggle · hold PTT · Esc cancel
         </div>
         <div className="cluster">
-          theme: {theme} · {active} pane
+          theme: {theme}
         </div>
       </footer>
     </div>
