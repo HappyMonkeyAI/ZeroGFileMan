@@ -37,9 +37,17 @@ import {
   thumbPixelSize,
   type ListingViewMode
 } from '../shared/listing-view.js';
+import {
+  clampSplitRatio,
+  setLayout,
+  toggleMaximize,
+  workspaceGridTemplate,
+  type WorkspaceLayoutState
+} from '../shared/pane-layout.js';
 import type { FileEntry, SpeechApiKeyStatus, SpeechSettings, VoiceMode } from '../shared/types.js';
 import { shouldStopJewelOnRelease } from '../shared/voice-jewel.js';
 import { Icon } from './icons.js';
+import { loadStoredWorkspaceLayout, storeWorkspaceLayout } from './layout-prefs.js';
 import { loadStoredListingPrefs, storeListingPrefs } from './listing-prefs.js';
 import { SpeechClient, type SpeechWorker } from './speech.js';
 import {
@@ -222,6 +230,7 @@ function FilePane(props: {
   side: 'left' | 'right';
   pane: PaneState;
   active: boolean;
+  maximized: boolean;
   showHidden: boolean;
   autoNavigate: boolean;
   speechSettings: SpeechSettings;
@@ -232,6 +241,7 @@ function FilePane(props: {
   onChange: (next: PaneState) => void;
   onLog: (message: string) => void;
   onClipboard: (clip: FileClip | null) => void;
+  onToggleMaximize: () => void;
   onRefreshPeer?: () => void;
   onRegisterCommands: (commands: PaneCommands | null) => void;
 }) {
@@ -239,6 +249,7 @@ function FilePane(props: {
     side,
     pane,
     active,
+    maximized,
     showHidden,
     autoNavigate,
     speechSettings,
@@ -249,6 +260,7 @@ function FilePane(props: {
     onChange,
     onLog,
     onClipboard,
+    onToggleMaximize,
     onRefreshPeer,
     onRegisterCommands
   } = props;
@@ -820,6 +832,15 @@ function FilePane(props: {
             <button type="button" className="pill" title="Terminal here" onClick={() => void api().openWith(pane.path, 'terminal')}>
               <Icon name="terminal" />
             </button>
+            <button
+              type="button"
+              className={`pill${maximized ? ' lit' : ''}`}
+              title={maximized ? 'Restore split' : 'Maximize pane'}
+              aria-pressed={maximized}
+              onClick={onToggleMaximize}
+            >
+              <Icon name={maximized ? 'restore' : 'maximize'} />
+            </button>
             <div className="jewels">
               <button
                 type="button"
@@ -1039,10 +1060,20 @@ function App() {
   });
   const [clipboard, setClipboard] = useState<FileClip | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayoutState>(() =>
+    loadStoredWorkspaceLayout()
+  );
   const [log, setLog] = useState<string[]>([`[${stamp()}] ZeroG FileMan ready · dual commander`]);
   const leftCommands = useRef<PaneCommands | null>(null);
   const rightCommands = useRef<PaneCommands | null>(null);
   const jumpInputRef = useRef<HTMLInputElement | null>(null);
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  const dragRef = useRef<{ start: number; ratio: number; vertical: boolean } | null>(null);
+
+  const updateWorkspaceLayout = useCallback((next: WorkspaceLayoutState) => {
+    setWorkspaceLayout(next);
+    storeWorkspaceLayout(next);
+  }, []);
 
   const pushLog = useCallback((message: string) => {
     setLog((prev) => [...prev.slice(-40), message]);
@@ -1543,6 +1574,23 @@ function App() {
               }}
             />
           </div>
+          <div className="tool-group" role="group" aria-label="Workspace layout">
+            <ToolButton
+              icon="split-v"
+              title="Side by side"
+              onClick={() => updateWorkspaceLayout(setLayout(workspaceLayout, 'split-v'))}
+            />
+            <ToolButton
+              icon="split-h"
+              title="Stacked"
+              onClick={() => updateWorkspaceLayout(setLayout(workspaceLayout, 'split-h'))}
+            />
+            <ToolButton
+              icon={workspaceLayout.maximized ? 'restore' : 'maximize'}
+              title={workspaceLayout.maximized ? 'Restore split' : 'Maximize active pane'}
+              onClick={() => updateWorkspaceLayout(toggleMaximize(workspaceLayout, active))}
+            />
+          </div>
         </div>
         <div className="toolbar-end">
           <label className="check">
@@ -1556,45 +1604,103 @@ function App() {
         </div>
       </section>
 
-      <main className="workspace">
-        <FilePane
-          side="left"
-          pane={left}
-          active={active === 'left'}
-          showHidden={showHidden}
-          autoNavigate={autoNavigate}
-          speechSettings={speechSettings}
-          demoText={demoText}
-          clipboard={clipboard}
-          otherPath={right.path}
-          onActivate={() => setActive('left')}
-          onChange={setLeft}
-          onLog={pushLog}
-          onClipboard={setClipboard}
-          onRefreshPeer={() => refreshSide('right')}
-          onRegisterCommands={(c) => {
-            leftCommands.current = c;
-          }}
-        />
-        <FilePane
-          side="right"
-          pane={right}
-          active={active === 'right'}
-          showHidden={showHidden}
-          autoNavigate={autoNavigate}
-          speechSettings={speechSettings}
-          demoText={demoText}
-          clipboard={clipboard}
-          otherPath={left.path}
-          onActivate={() => setActive('right')}
-          onChange={setRight}
-          onLog={pushLog}
-          onClipboard={setClipboard}
-          onRefreshPeer={() => refreshSide('left')}
-          onRegisterCommands={(c) => {
-            rightCommands.current = c;
-          }}
-        />
+      <main
+        ref={workspaceRef}
+        className={`workspace layout-${workspaceLayout.layout}${workspaceLayout.maximized ? ' maximized' : ''}`}
+        style={
+          {
+            gridTemplateColumns: workspaceGridTemplate(workspaceLayout).columns,
+            gridTemplateRows: workspaceGridTemplate(workspaceLayout).rows
+          } as CSSProperties
+        }
+      >
+        {workspaceLayout.maximized !== 'right' ? (
+          <FilePane
+            side="left"
+            pane={left}
+            active={active === 'left'}
+            maximized={workspaceLayout.maximized === 'left'}
+            showHidden={showHidden}
+            autoNavigate={autoNavigate}
+            speechSettings={speechSettings}
+            demoText={demoText}
+            clipboard={clipboard}
+            otherPath={right.path}
+            onActivate={() => setActive('left')}
+            onChange={setLeft}
+            onLog={pushLog}
+            onClipboard={setClipboard}
+            onToggleMaximize={() => updateWorkspaceLayout(toggleMaximize(workspaceLayout, 'left'))}
+            onRefreshPeer={() => refreshSide('right')}
+            onRegisterCommands={(c) => {
+              leftCommands.current = c;
+            }}
+          />
+        ) : null}
+        {!workspaceLayout.maximized ? (
+          <div
+            className={`workspace-gutter ${workspaceLayout.layout === 'split-h' ? 'horizontal' : 'vertical'}`}
+            role="separator"
+            aria-orientation={workspaceLayout.layout === 'split-h' ? 'horizontal' : 'vertical'}
+            aria-valuenow={Math.round(workspaceLayout.ratio * 100)}
+            title="Drag to resize"
+            onPointerDown={(event) => {
+              const box = workspaceRef.current?.getBoundingClientRect();
+              if (!box) return;
+              event.preventDefault();
+              (event.target as HTMLElement).setPointerCapture(event.pointerId);
+              dragRef.current = {
+                start: workspaceLayout.layout === 'split-h' ? event.clientY : event.clientX,
+                ratio: workspaceLayout.ratio,
+                vertical: workspaceLayout.layout === 'split-v'
+              };
+            }}
+            onPointerMove={(event) => {
+              const drag = dragRef.current;
+              const box = workspaceRef.current?.getBoundingClientRect();
+              if (!drag || !box) return;
+              const span = drag.vertical ? box.width : box.height;
+              if (span <= 0) return;
+              const delta = (drag.vertical ? event.clientX : event.clientY) - drag.start;
+              updateWorkspaceLayout({
+                ...workspaceLayout,
+                ratio: clampSplitRatio(drag.ratio + delta / span)
+              });
+            }}
+            onPointerUp={() => {
+              dragRef.current = null;
+            }}
+            onPointerCancel={() => {
+              dragRef.current = null;
+            }}
+            onDoubleClick={() =>
+              updateWorkspaceLayout({ ...workspaceLayout, ratio: 0.5 })
+            }
+          />
+        ) : null}
+        {workspaceLayout.maximized !== 'left' ? (
+          <FilePane
+            side="right"
+            pane={right}
+            active={active === 'right'}
+            maximized={workspaceLayout.maximized === 'right'}
+            showHidden={showHidden}
+            autoNavigate={autoNavigate}
+            speechSettings={speechSettings}
+            demoText={demoText}
+            clipboard={clipboard}
+            otherPath={left.path}
+            onActivate={() => setActive('right')}
+            onChange={setRight}
+            onLog={pushLog}
+            onClipboard={setClipboard}
+            onToggleMaximize={() => updateWorkspaceLayout(toggleMaximize(workspaceLayout, 'right'))}
+            onRefreshPeer={() => refreshSide('left')}
+            onRegisterCommands={(c) => {
+              rightCommands.current = c;
+            }}
+          />
+        ) : null}
       </main>
 
       <section className={`transcript${speechSettingsOpen ? ' settings-open' : ''}`}>
@@ -1854,7 +1960,12 @@ function App() {
           jewels: click toggle · hold PTT · Esc cancel
         </div>
         <div className="cluster">
-          theme: {theme}
+          theme: {theme} ·{' '}
+          {workspaceLayout.maximized
+            ? 'maximized'
+            : workspaceLayout.layout === 'split-h'
+              ? 'stacked'
+              : 'side by side'}
         </div>
       </footer>
     </div>

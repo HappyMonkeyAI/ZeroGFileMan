@@ -476,11 +476,53 @@ select {
 .workspace {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 0;
   padding: 6px;
   min-height: 0;
   background: #05080e;
+}
+
+.workspace-gutter {
+  position: relative;
+  z-index: 2;
+  background: transparent;
+}
+
+.workspace-gutter.vertical {
+  cursor: col-resize;
+  width: 6px;
+  margin: 0 -1px;
+}
+
+.workspace-gutter.horizontal {
+  cursor: row-resize;
+  height: 6px;
+  margin: -1px 0;
+}
+
+.workspace-gutter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  opacity: 0.55;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.workspace-gutter.vertical::after {
+  left: 2px;
+  right: 2px;
+}
+
+.workspace-gutter.horizontal::after {
+  top: 2px;
+  bottom: 2px;
+}
+
+.workspace-gutter:hover::after,
+.workspace-gutter:active::after {
+  opacity: 1;
+  background: var(--accent);
 }
 
 .pane {

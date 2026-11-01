@@ -24,6 +24,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 | D12 | Jewel UX polish | Click-toggle + hold PTT; Esc cancel; bus listening state |
 | D13 | Windows packaging | electron-builder NSIS + portable → `release/` |
 | D14 | Listing view modes | Details / Icons / Thumbnails + Ctrl+wheel scale; thumb caps |
+| D15 | Split layouts | Side-by-side / stacked + maximize; draggable gutter |
 
 ## Near-term (ordered)
 
@@ -58,7 +59,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 
 | ID | Task | Acceptance | Status |
 |----|------|------------|--------|
-| P3.1 | Split layouts | Adapt Term `pane-layout`: dual vertical (default), dual horizontal, single maximize | open |
+| P3.1 | Split layouts | Adapt Term `pane-layout`: dual vertical (default), dual horizontal, single maximize | done |
 | P3.2 | Optional 4-pane grid | Only after dual layouts feel solid | open |
 | P3.3 | Collapsible transcript drawer | Height persist; collapse to one status line | open |
 | P3.4 | Column sort | Name / size / modified click-to-sort; persist per pane | open |
@@ -89,7 +90,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 
 ## Suggested next slice
 
-**P3.1 layouts**, then **P4.2** icon / **P4.4** CI.
+**P4.2 app icon**, then **P4.4 CI**, then **P3.3** transcript drawer / **P3.4** column sort.
 
 ## Task board seed
 
