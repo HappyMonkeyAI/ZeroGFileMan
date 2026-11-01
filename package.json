@@ -20,7 +20,8 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-preload.mjs && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "start": "electron .",
+    "start": "node scripts/start-electron.mjs",
+    "start:electron-cli": "electron .",
     "ci": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {

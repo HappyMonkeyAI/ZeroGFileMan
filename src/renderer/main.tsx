@@ -10,6 +10,16 @@ import {
   parentLocal
 } from '../shared/files.js';
 import { fuzzyMatchEntries, fuzzyMatchHits, parseActionCommand } from '../shared/fuzzy-path.js';
+import {
+  canGoBack,
+  canGoForward,
+  currentPath,
+  initialHistory,
+  pushPath,
+  stepBack,
+  stepForward,
+  type HistoryState
+} from '../shared/pane-history.js';
 import type { FileEntry, SpeechSettings, VoiceMode } from '../shared/types.js';
 import { Icon } from './icons.js';
 import { DEFAULT_SPEECH, SpeechClient } from './speech.js';
@@ -31,6 +41,8 @@ type PaneState = {
   status: string;
   listening: VoiceMode | null;
   filter: string;
+  history: string[];
+  historyIndex: number;
 };
 
 type FileClip = {
@@ -48,15 +60,23 @@ type PaneCommands = {
   copy: () => void;
   cut: () => void;
   paste: () => void;
+  copyToOther: () => void;
+  moveToOther: () => void;
   copyPath: () => void;
   open: () => void;
   openNotepad: () => void;
   openTerminal: () => void;
   reveal: () => void;
   parent: () => void;
+  back: () => void;
+  forward: () => void;
   voiceNavigate: () => void;
   voiceAction: () => void;
 };
+
+function historyOf(pane: PaneState): HistoryState {
+  return { history: pane.history, historyIndex: pane.historyIndex };
+}
 
 const speech = new SpeechClient();
 
@@ -112,6 +132,7 @@ function FilePane(props: {
   speechSettings: SpeechSettings;
   demoText: string;
   clipboard: FileClip | null;
+  otherPath: string;
   onActivate: () => void;
   onChange: (next: PaneState) => void;
   onLog: (message: string) => void;
@@ -128,6 +149,7 @@ function FilePane(props: {
     speechSettings,
     demoText,
     clipboard,
+    otherPath,
     onActivate,
     onChange,
     onLog,
@@ -151,12 +173,15 @@ function FilePane(props: {
   const files = visible.length - dirs;
 
   const navigateTo = useCallback(
-    async (path: string) => {
+    async (path: string, options: { record?: boolean; history?: HistoryState } = {}) => {
+      const record = options.record !== false;
       try {
         const next = await loadPane(path);
+        const hist = options.history ?? (record ? pushPath(historyOf(pane), next.path) : historyOf(pane));
         onChange({
           ...pane,
           ...next,
+          ...hist,
           selected: null,
           matchNames: new Set(),
           status: next.path,
@@ -169,6 +194,18 @@ function FilePane(props: {
     },
     [onChange, onLog, pane]
   );
+
+  const goBack = useCallback(async () => {
+    const stepped = stepBack(historyOf(pane));
+    if (!stepped) return;
+    await navigateTo(currentPath(stepped), { record: false, history: stepped });
+  }, [navigateTo, pane]);
+
+  const goForward = useCallback(async () => {
+    const stepped = stepForward(historyOf(pane));
+    if (!stepped) return;
+    await navigateTo(currentPath(stepped), { record: false, history: stepped });
+  }, [navigateTo, pane]);
 
   const refresh = useCallback(async () => {
     const selected = pane.selected;
@@ -194,6 +231,29 @@ function FilePane(props: {
       name: selectedEntry.name
     };
   }, [onLog, pane.path, selectedEntry]);
+
+  const transferToOther = useCallback(
+    async (mode: 'copy' | 'move') => {
+      const sel = requireSelection();
+      if (!sel) return;
+      if (otherPath === pane.path) {
+        onLog('Other pane is the same directory.');
+        return;
+      }
+      try {
+        const dest =
+          mode === 'copy'
+            ? await api().copyLocalEntry(sel.path, otherPath)
+            : await api().moveLocalEntry(sel.path, otherPath);
+        await refresh();
+        onRefreshPeer?.();
+        onLog(`[${stamp()}] ${mode} → other pane: ${baseName(dest)}`);
+      } catch (error) {
+        onLog(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [onLog, onRefreshPeer, otherPath, pane.path, refresh, requireSelection]
+  );
 
   const doNewFolder = useCallback(async () => {
     const name = window.prompt('New folder name', 'New Folder');
@@ -433,6 +493,8 @@ function FilePane(props: {
       copy: () => doCopyClip('copy'),
       cut: () => doCopyClip('cut'),
       paste: () => void doPaste(),
+      copyToOther: () => void transferToOther('copy'),
+      moveToOther: () => void transferToOther('move'),
       copyPath: () => void api().copyText(pane.path).then(() => onLog(`[${stamp()}] copy path ${pane.path}`)),
       open: () => {
         const sel = requireSelection();
@@ -448,6 +510,8 @@ function FilePane(props: {
         void api().showItemInFolder(target);
       },
       parent: () => void navigateTo(parentLocal(pane.path)),
+      back: () => void goBack(),
+      forward: () => void goForward(),
       voiceNavigate: () => void toggleJewel('navigate'),
       voiceAction: () => void toggleJewel('action')
     });
@@ -459,6 +523,8 @@ function FilePane(props: {
     doNewFolder,
     doPaste,
     doRename,
+    goBack,
+    goForward,
     navigateTo,
     onLog,
     onRegisterCommands,
@@ -466,7 +532,8 @@ function FilePane(props: {
     pane.selected,
     refresh,
     requireSelection,
-    toggleJewel
+    toggleJewel,
+    transferToOther
   ]);
 
   return (
@@ -637,8 +704,11 @@ function App() {
           /* home */
         }
         const [l, r] = await Promise.all([loadPane(leftPath), loadPane(home)]);
+        const leftHist = initialHistory(l.path);
+        const rightHist = initialHistory(r.path);
         setLeft({
           ...l,
+          ...leftHist,
           selected: null,
           matchNames: new Set(),
           status: l.path,
@@ -647,6 +717,7 @@ function App() {
         });
         setRight({
           ...r,
+          ...rightHist,
           selected: null,
           matchNames: new Set(),
           status: r.path,
@@ -659,6 +730,63 @@ function App() {
       }
     })();
   }, [pushLog]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (typing) return;
+      const c = cmds();
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        setActive((side) => (side === 'left' ? 'right' : 'left'));
+        return;
+      }
+      if (event.altKey && event.key === 'ArrowLeft') {
+        event.preventDefault();
+        c?.back();
+        return;
+      }
+      if (event.altKey && event.key === 'ArrowRight') {
+        event.preventDefault();
+        c?.forward();
+        return;
+      }
+      if (event.altKey && event.key === 'ArrowUp') {
+        event.preventDefault();
+        c?.parent();
+        return;
+      }
+      if (event.key === 'F2') {
+        event.preventDefault();
+        c?.rename();
+        return;
+      }
+      if (event.key === 'F5') {
+        event.preventDefault();
+        c?.copyToOther();
+        return;
+      }
+      if (event.key === 'F6') {
+        event.preventDefault();
+        c?.moveToOther();
+        return;
+      }
+      if (event.key === 'F7') {
+        event.preventDefault();
+        c?.newFolder();
+        return;
+      }
+      if (event.key === 'Delete') {
+        event.preventDefault();
+        c?.delete();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active]);
 
   useEffect(() => {
     return api().onMenuCommand((command) => {
@@ -699,6 +827,12 @@ function App() {
           break;
         case 'edit:paste':
           c?.paste();
+          break;
+        case 'edit:copy-other':
+          c?.copyToOther();
+          break;
+        case 'edit:move-other':
+          c?.moveToOther();
           break;
         case 'view:toggle-hidden':
           setShowHidden((v) => !v);
@@ -806,10 +940,21 @@ function App() {
       <section className="master-toolbar">
         <div className="tool-groups">
           <div className="tool-group">
-            <ToolButton icon="chevron-left" title="Parent" onClick={() => cmds()?.parent()} />
-            <ToolButton icon="level-up" title="Up" onClick={() => cmds()?.parent()} />
+            <ToolButton
+              icon="chevron-left"
+              title="Back (Alt+Left)"
+              disabled={!canGoBack(historyOf(active === 'left' ? left : right))}
+              onClick={() => cmds()?.back()}
+            />
+            <ToolButton
+              icon="chevron-right"
+              title="Forward (Alt+Right)"
+              disabled={!canGoForward(historyOf(active === 'left' ? left : right))}
+              onClick={() => cmds()?.forward()}
+            />
+            <ToolButton icon="level-up" title="Parent (Alt+Up)" onClick={() => cmds()?.parent()} />
             <span className="tool-sep" />
-            <ToolButton icon="refresh" title="Refresh (F5)" onClick={() => cmds()?.refresh()} />
+            <ToolButton icon="refresh" title="Refresh" onClick={() => cmds()?.refresh()} />
           </div>
           <div className="tool-group">
             <ToolButton icon="folder-plus" label="New Folder" hint="F7" title="New folder" tone="accent" onClick={() => cmds()?.newFolder()} />
@@ -817,9 +962,11 @@ function App() {
             <ToolButton icon="trash" label="Delete" title="Delete" danger onClick={() => cmds()?.delete()} />
           </div>
           <div className="tool-group">
-            <ToolButton icon="copy" label="Copy" title="Copy" tone="violet" onClick={() => cmds()?.copy()} />
-            <ToolButton icon="cut" label="Move/Cut" title="Cut" tone="ok" onClick={() => cmds()?.cut()} />
+            <ToolButton icon="copy" label="Copy" title="Copy to clipboard" tone="violet" onClick={() => cmds()?.copy()} />
+            <ToolButton icon="cut" label="Cut" title="Cut to clipboard" tone="ok" onClick={() => cmds()?.cut()} />
             <ToolButton icon="clipboard" label="Paste" title="Paste" disabled={!clipboard} onClick={() => cmds()?.paste()} />
+            <ToolButton icon="send-right" label="Copy →" hint="F5" title="Copy selection to other pane" tone="violet" onClick={() => cmds()?.copyToOther()} />
+            <ToolButton icon="arrow-down" label="Move →" hint="F6" title="Move selection to other pane" tone="ok" onClick={() => cmds()?.moveToOther()} />
             <ToolButton icon="path" label="Copy Path" title="Copy path" tone="sky" onClick={() => cmds()?.copyPath()} />
           </div>
           <div className="tool-group">
@@ -858,6 +1005,7 @@ function App() {
           speechSettings={speechSettings}
           demoText={demoText}
           clipboard={clipboard}
+          otherPath={right.path}
           onActivate={() => setActive('left')}
           onChange={setLeft}
           onLog={pushLog}
@@ -876,6 +1024,7 @@ function App() {
           speechSettings={speechSettings}
           demoText={demoText}
           clipboard={clipboard}
+          otherPath={left.path}
           onActivate={() => setActive('right')}
           onChange={setRight}
           onLog={pushLog}
@@ -897,8 +1046,8 @@ function App() {
             engine: {speechSettings.engine}
           </span>
           <span>
-            <span className="kbd">Tab</span> pane · <span className="kbd">N</span>/<span className="kbd">A</span> jewels ·{' '}
-            <span className="kbd">F5</span> refresh
+            <span className="kbd">Tab</span> pane · <span className="kbd">F5</span> copy→ · <span className="kbd">F6</span>{' '}
+            move→ · <span className="kbd">Alt+←/→</span> history
           </span>
         </div>
         <div className="transcript-log">

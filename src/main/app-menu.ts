@@ -14,6 +14,8 @@ export type MenuCommand =
   | 'edit:copy'
   | 'edit:cut'
   | 'edit:paste'
+  | 'edit:copy-other'
+  | 'edit:move-other'
   | 'view:toggle-hidden'
   | 'view:toggle-autonav'
   | 'view:theme-dark'
@@ -76,8 +78,18 @@ export function installApplicationMenu(getWindow: () => BrowserWindow | undefine
         },
         {
           label: 'Refresh',
-          accelerator: 'F5',
+          accelerator: 'CmdOrCtrl+R',
           click: () => send(getWindow(), 'file:refresh')
+        },
+        {
+          label: 'Copy to Other Pane',
+          accelerator: 'F5',
+          click: () => send(getWindow(), 'edit:copy-other')
+        },
+        {
+          label: 'Move to Other Pane',
+          accelerator: 'F6',
+          click: () => send(getWindow(), 'edit:move-other')
         },
         { type: 'separator' },
         { role: 'quit', label: 'Quit' }
