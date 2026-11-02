@@ -82,9 +82,6 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 - Permissions / owner columns (platform-accurate, not fake Unix on NTFS)  
 - Thumbnail generation caps (size/type allowlist; no decode of huge RAW by default)  
 - Pane chrome stays Active/Idle (no Left/Right labels) — spatial layout is enough  
-- ZeroG Term CLI cwd protocol (`ZEROG_OPEN_CWD` / argv) — FileMan launches with cwd hint; Term can honor it more richly later  
-
-
 - SFTP pane (borrow SFTP / Term patterns)  
 - Shared `@zerog/speech` / `@zerog/workspace-layout` packages  
 - spine-design UI baselines  
@@ -93,7 +90,7 @@ Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/Zero
 
 ## Suggested next slice
 
-Optional Term-side `ZEROG_OPEN_CWD` deep-link; later D5 Pro Commander deck polish.
+Later D5 Pro Commander deck polish; SFTP pane when needed.
 
 ## Task board seed
 

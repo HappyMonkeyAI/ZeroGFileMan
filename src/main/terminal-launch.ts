@@ -64,9 +64,12 @@ function packagedZeroGTermPaths(): string[] {
 
 /** Launch ZeroG Term; prefers an installed exe, then a local checkout, then PATH CLI. */
 export function openZeroGTerm(absolutePath: string): void {
+  // Prefer --cwd so a running Term (single-instance) receives the path on argv;
+  // ZEROG_OPEN_CWD remains as a cold-start fallback in the child env.
+  const cwdArgs = ['--cwd', absolutePath];
   for (const exe of packagedZeroGTermPaths()) {
     if (existsSync(exe)) {
-      spawnDetached(exe, [absolutePath], { cwd: absolutePath });
+      spawnDetached(exe, cwdArgs, { cwd: absolutePath });
       return;
     }
   }
@@ -74,12 +77,12 @@ export function openZeroGTerm(absolutePath: string): void {
   const devRoot = join(homedir(), 'Documents', 'development', 'zerogterm');
   if (existsSync(join(devRoot, 'package.json'))) {
     const electronCmd = process.platform === 'win32' ? 'electron.cmd' : 'electron';
-    spawnDetached(electronCmd, ['.', absolutePath], { cwd: devRoot, shell: true });
+    spawnDetached(electronCmd, ['.', ...cwdArgs], { cwd: devRoot, shell: true });
     return;
   }
 
   const cli = process.platform === 'win32' ? 'zerogterm.cmd' : 'zerogterm';
-  spawnDetached(cli, [absolutePath], { cwd: absolutePath, shell: true });
+  spawnDetached(cli, cwdArgs, { cwd: absolutePath, shell: true });
 }
 
 export function openCustomTerminal(absolutePath: string, customCommand: string): void {
