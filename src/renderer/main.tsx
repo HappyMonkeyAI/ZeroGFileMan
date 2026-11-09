@@ -862,8 +862,13 @@ function FilePane(props: {
         if (sel) void api().openWith(sel.path, 'notepad');
       },
       openTerminal: () =>
-        void openTerminalHere(pane.path).then(() =>
-          onLog(`[${stamp()}] terminal ${pane.path} (${terminalPrefs.launcher})`)
+        void runReported(
+          'Open terminal',
+          async () => {
+            await openTerminalHere(pane.path);
+            onLog(`[${stamp()}] terminal ${pane.path} (${terminalPrefs.launcher})`);
+          },
+          onLog
         ),
       reveal: () => {
         const target = pane.selected ? joinLocal(pane.path, pane.selected) : pane.path;

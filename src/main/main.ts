@@ -236,8 +236,10 @@ handle('speechKey:clear', async () => {
 handle('speechKey:read', async () => (await secrets.get(SPEECH_API_KEY)) ?? sessionSpeechKey);
 
 app.whenReady().then(() => {
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    callback(permission === 'media' && isAppUrl(webContents.getURL(), appLocation));
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    // Judge the frame that asked, not just the top-level page.
+    const requester = details.requestingUrl || webContents.getURL();
+    callback(permission === 'media' && isAppUrl(requester, appLocation));
   });
   createWindow();
 });
