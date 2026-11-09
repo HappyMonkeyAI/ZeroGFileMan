@@ -2,7 +2,9 @@
 // MediaRecorder, then decodes and resamples it to the mono 16 kHz Float32
 // input Whisper expects.
 
-export const WHISPER_SAMPLE_RATE = 16000;
+import { WHISPER_SAMPLE_RATE } from '../shared/audio.js';
+
+export { WHISPER_SAMPLE_RATE };
 // Hard cap so a stuck-open mic cannot queue an unbounded transcription.
 export const MAX_UTTERANCE_SECONDS = 30;
 // Gate for dead-air recordings; RMS below this skips the model entirely.

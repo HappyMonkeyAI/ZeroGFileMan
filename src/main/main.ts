@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildContextMenu, parseContextMenuTarget } from '../shared/context-menu.js';
+import { parseServerTranscriptionInput, transcribeViaServer } from '../shared/speech-server.js';
 import { isAppUrl, type AppLocation } from './app-origin.js';
 import { installApplicationMenu } from './app-menu.js';
 import { addFavorite, listFavorites, removeFavorite } from './favorites-store.js';
@@ -233,7 +234,12 @@ handle('speechKey:clear', async () => {
   await secrets.clear(SPEECH_API_KEY);
   return speechKeyStatus();
 });
-handle('speechKey:read', async () => (await secrets.get(SPEECH_API_KEY)) ?? sessionSpeechKey);
+// The key is used here and never returned to the renderer.
+handle('speech:transcribeServer', async (_event, raw: unknown) => {
+  const input = parseServerTranscriptionInput(raw);
+  const apiKey = (await secrets.get(SPEECH_API_KEY)) ?? sessionSpeechKey ?? undefined;
+  return transcribeViaServer({ ...input, apiKey });
+});
 
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {

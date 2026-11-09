@@ -109,3 +109,25 @@ describe('SpeechClient builtin', () => {
     await expect(pending).rejects.toThrow('module load failed');
   });
 });
+
+describe('SpeechClient server', () => {
+  const SERVER: SpeechSettings = { ...DEFAULT_SPEECH, engine: 'server', serverUrl: 'http://10.0.0.5:8080/v1/audio/transcriptions' };
+
+  it('hands audio and settings to main, with no key in the request', async () => {
+    const requests: unknown[] = [];
+    const client = new SpeechClient({
+      transcribeServer: async (request) => {
+        requests.push(request);
+        return 'open docs';
+      }
+    });
+    await expect(client.transcribe(audio(), SERVER)).resolves.toMatchObject({ text: 'open docs', engine: 'server' });
+    expect(requests).toEqual([
+      { url: SERVER.serverUrl, model: SERVER.serverModel, language: SERVER.language, audio: audio() }
+    ]);
+  });
+
+  it('fails clearly when no server bridge is wired in', async () => {
+    await expect(new SpeechClient().transcribe(audio(), SERVER)).rejects.toThrow(/not available/);
+  });
+});

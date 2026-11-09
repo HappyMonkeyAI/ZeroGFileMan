@@ -1,11 +1,13 @@
 // One way in for speech recognition, whichever engine is configured.
 //
 // Demo uses typed transcript. Builtin runs Transformers.js Whisper in a worker.
-// Server posts WAV to an OpenAI-compatible transcription endpoint.
+// Server hands the audio to main, which posts WAV to an OpenAI-compatible
+// transcription endpoint with the stored API key (the key never reaches the
+// renderer).
 
+import type { ServerTranscriptionInput } from '../shared/speech-server.js';
 import type { SpeechSettings } from '../shared/types.js';
 import { DEFAULT_SPEECH_MODEL, supportsLanguageSelection } from './speech-models.js';
-import { transcribeViaServer } from './speech-server.js';
 
 export type SpeechProgress =
   | { kind: 'loading'; progress: number | null }
@@ -35,9 +37,9 @@ type Pending = {
 
 export type SpeechClientOptions = {
   createWorker?: () => SpeechWorker;
-  fetchImpl?: typeof fetch;
   now?: () => number;
-  resolveApiKey?: () => Promise<string | null>;
+  /** Server engine: main makes the request and adds the API key. */
+  transcribeServer?: (request: ServerTranscriptionInput) => Promise<string>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,17 +71,13 @@ export class SpeechClient {
 
     if (settings.engine === 'server') {
       onProgress?.({ kind: 'loading', progress: null });
-      const apiKey = (await this.options.resolveApiKey?.().catch(() => null)) ?? undefined;
-      const text = await transcribeViaServer(
-        {
-          url: settings.serverUrl,
-          model: settings.serverModel,
-          language: settings.language,
-          audio,
-          apiKey
-        },
-        this.options.fetchImpl ?? fetch
-      );
+      if (!this.options.transcribeServer) throw new Error('Server speech is not available here.');
+      const text = await this.options.transcribeServer({
+        url: settings.serverUrl,
+        model: settings.serverModel,
+        language: settings.language,
+        audio
+      });
       return { text, elapsedMs: now() - started, engine: 'server' };
     }
 

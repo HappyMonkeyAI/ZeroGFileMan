@@ -157,7 +157,7 @@ const speech = new SpeechClient({
     new Worker(new URL('./voice-worker.ts', import.meta.url), {
       type: 'module'
     }) as unknown as SpeechWorker,
-  resolveApiKey: () => window.fileman.readSpeechApiKey()
+  transcribeServer: (request) => window.fileman.transcribeViaServer(request)
 });
 
 type PaneState = {

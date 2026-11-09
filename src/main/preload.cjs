@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('fileman', {
   speechApiKeyStatus: () => ipcRenderer.invoke('speechKey:status'),
   saveSpeechApiKey: (key) => ipcRenderer.invoke('speechKey:save', key),
   clearSpeechApiKey: () => ipcRenderer.invoke('speechKey:clear'),
-  readSpeechApiKey: () => ipcRenderer.invoke('speechKey:read'),
+  transcribeViaServer: (request) => ipcRenderer.invoke('speech:transcribeServer', request),
   showContextMenu: (target) => ipcRenderer.invoke('contextMenu:show', target),
   onMenuCommand: (callback) => {
     const handler = (_event, command) => callback(command);

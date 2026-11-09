@@ -14,7 +14,7 @@ Three engines:
 
 1. **demo** — typed transcript for UI/fuzzy testing without a mic or model
 2. **builtin** — Transformers.js Whisper in a module worker (`voice-worker.ts`), models from the Hugging Face hub, cached after first download
-3. **server** — OpenAI-compatible `/v1/audio/transcriptions` (optional Bearer key via main later)
+3. **server** — OpenAI-compatible `/v1/audio/transcriptions` (optional Bearer key added by main — see ADR-0005)
 
 No cloud LLM in the file-operation path. Voice remains optional for every core action.
 

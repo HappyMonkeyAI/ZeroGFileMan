@@ -14,17 +14,19 @@
 // it goes is a decision worth making deliberately — but it is the user's to
 // make, not ours to refuse. What is still enforced is the shape of the target:
 // an http(s) URL with a host, so a typo or a file:// path cannot become a
-// request. See SECURITY.md.
+// request.
 //
-// A key, where the server wants one, is sent as `Authorization: Bearer`. It
-// arrives as an argument and is never stored here: the main process holds it
-// encrypted and hands it over per request. See src/main/secret-store.ts.
+// The request is made by the main process, not the renderer: the API key,
+// where the server wants one, is read from the encrypted secret store and sent
+// as `Authorization: Bearer` without ever crossing into the page. The
+// renderer sends only the audio and settings (see parseServerTranscriptionInput),
+// and main adds the key. See src/main/secret-store.ts.
 
-import { WHISPER_SAMPLE_RATE } from './voice.js';
+import { WHISPER_SAMPLE_RATE } from './audio.js';
 // The endpoint rules live in shared/ because the AI suggestion path asks the same
 // questions of the same kind of URL. Re-exported so existing importers of this
 // module do not have to know that.
-import { isLoopbackEndpoint, isSupportedEndpoint, sendsKeyInClear } from '../shared/endpoints.js';
+import { isLoopbackEndpoint, isSupportedEndpoint, sendsKeyInClear } from './endpoints.js';
 
 export { isLoopbackEndpoint, isSupportedEndpoint, sendsKeyInClear };
 
@@ -41,6 +43,30 @@ export type ServerTranscriptionRequest = {
    */
   apiKey?: string;
 };
+
+/** What the renderer may ask main to transcribe; main supplies the key. */
+export type ServerTranscriptionInput = Omit<ServerTranscriptionRequest, 'apiKey'>;
+
+/** Generous ceiling: utterances are capped at 30 s, sent as 16 kHz mono. */
+const MAX_AUDIO_SAMPLES = 120 * WHISPER_SAMPLE_RATE;
+
+/** Validate an untrusted transcription request arriving over IPC. */
+export function parseServerTranscriptionInput(raw: unknown): ServerTranscriptionInput {
+  if (!raw || typeof raw !== 'object') throw new Error('Invalid transcription request.');
+  const source = raw as Record<string, unknown>;
+  const { url, model, language, audio, sampleRate } = source;
+  if (typeof url !== 'string' || !isSupportedEndpoint(url)) {
+    throw new Error('Speech server URL must be an http:// or https:// address.');
+  }
+  if (typeof model !== 'string') throw new Error('Speech server model name is required');
+  if (typeof language !== 'string') throw new Error('Invalid transcription language.');
+  if (!(audio instanceof Float32Array) || audio.length === 0) throw new Error('No audio to transcribe.');
+  if (audio.length > MAX_AUDIO_SAMPLES) throw new Error('That recording is too long to transcribe.');
+  if (sampleRate !== undefined && (typeof sampleRate !== 'number' || !Number.isInteger(sampleRate) || sampleRate < 8000 || sampleRate > 96000)) {
+    throw new Error('Invalid sample rate.');
+  }
+  return { url, model, language, audio, ...(sampleRate === undefined ? {} : { sampleRate }) };
+}
 
 /** Long enough for a slow first load of a large local model. */
 const REQUEST_TIMEOUT_MS = 120000;
@@ -202,7 +228,7 @@ function timeoutSignal(): AbortSignal | undefined {
  * Post the utterance to the configured server and return its transcript.
  *
  * `fetchImpl` is injectable so the request shape can be tested without a
- * server; production passes the renderer's fetch.
+ * server; production runs this in main with Node's fetch.
  */
 export async function transcribeViaServer(
   request: ServerTranscriptionRequest,
