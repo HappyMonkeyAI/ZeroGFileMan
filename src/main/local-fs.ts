@@ -220,6 +220,8 @@ export async function moveLocalEntry(from: string, toDir: string): Promise<strin
   try {
     await rm(source, { recursive: true, force: false });
   } catch (error) {
+    // Already gone (removed by something else): the move still completed.
+    if (errorCode(error) === 'ENOENT') return destination;
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`Copied to ${destination}, but the original could not be removed: ${reason}`);
   }

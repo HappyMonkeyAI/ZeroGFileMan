@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Lets a test pretend the destination is on another drive.
-const fsControl = vi.hoisted(() => ({ renameFailsWith: null as string | null }));
+const fsControl = vi.hoisted(() => ({ renameFailsWith: null as string | null, rmFailsWith: null as string | null }));
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
@@ -14,6 +14,12 @@ vi.mock('node:fs/promises', async (importOriginal) => {
         throw Object.assign(new Error(`${fsControl.renameFailsWith}: simulated`), { code: fsControl.renameFailsWith });
       }
       return actual.rename(from, to);
+    },
+    rm: async (...args: Parameters<typeof actual.rm>) => {
+      if (fsControl.rmFailsWith) {
+        throw Object.assign(new Error(`${fsControl.rmFailsWith}: simulated`), { code: fsControl.rmFailsWith });
+      }
+      return actual.rm(...args);
     }
   };
 });
@@ -31,6 +37,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   fsControl.renameFailsWith = null;
+  fsControl.rmFailsWith = null;
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -101,6 +108,25 @@ describe('moveLocalEntry', () => {
     expect(readFileSync(join(moved, 'nested', 'deep.txt'), 'utf8')).toBe('payload');
     expect(statSync(join(moved, 'nested', 'deep.txt')).mtime.getTime()).toBe(old.getTime());
     expect(existsSync(join(root, 'src'))).toBe(false);
+  });
+
+  it('treats an original that vanished after the copy as a completed move', async () => {
+    mkdirSync(join(root, 'dest'));
+    writeFileSync(join(root, 'a.txt'), 'x');
+    fsControl.renameFailsWith = 'EXDEV';
+    fsControl.rmFailsWith = 'ENOENT';
+    await expect(moveLocalEntry(join(root, 'a.txt'), join(root, 'dest'))).resolves.toBe(join(root, 'dest', 'a.txt'));
+  });
+
+  it('says the copy is in place when the original cannot be removed', async () => {
+    mkdirSync(join(root, 'dest'));
+    writeFileSync(join(root, 'a.txt'), 'x');
+    fsControl.renameFailsWith = 'EXDEV';
+    fsControl.rmFailsWith = 'EBUSY';
+    await expect(moveLocalEntry(join(root, 'a.txt'), join(root, 'dest'))).rejects.toThrow(
+      /Copied to .*but the original could not be removed/
+    );
+    expect(existsSync(join(root, 'dest', 'a.txt'))).toBe(true);
   });
 
   it('does not copy on other rename errors', async () => {
