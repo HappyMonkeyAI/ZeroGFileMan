@@ -16,10 +16,12 @@ import {
   formatModified,
   formatSize,
   isHiddenName,
+  isWindowsPath,
   joinLocal,
   parentLocal
 } from '../shared/files.js';
 import type { ContextMenuTargetKind } from '../shared/context-menu.js';
+import { entryNameProblem } from '../shared/entry-name.js';
 import { describeError, runReported } from '../shared/file-op.js';
 import { fuzzyMatchEntries, fuzzyMatchHits, parseActionCommand } from '../shared/fuzzy-path.js';
 import {
@@ -444,6 +446,11 @@ function FilePane(props: {
   const doNewFolder = useCallback(async () => {
     const name = window.prompt('New folder name', 'New Folder');
     if (!name?.trim()) return;
+    const nameProblem = entryNameProblem(name.trim(), isWindowsPath(pane.path) ? 'win32' : 'posix');
+    if (nameProblem) {
+      onLog(`New folder: ${nameProblem}`);
+      return;
+    }
     await runReported(
       `New folder “${name.trim()}”`,
       async () => {
@@ -460,6 +467,11 @@ function FilePane(props: {
     if (!sel) return;
     const next = window.prompt('Rename to', sel.name);
     if (!next?.trim() || next.trim() === sel.name) return;
+    const nameProblem = entryNameProblem(next.trim(), isWindowsPath(pane.path) ? 'win32' : 'posix');
+    if (nameProblem) {
+      onLog(`Rename “${sel.name}”: ${nameProblem}`);
+      return;
+    }
     await runReported(
       `Rename “${sel.name}”`,
       async () => {

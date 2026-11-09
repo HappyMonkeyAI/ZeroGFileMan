@@ -1,9 +1,28 @@
 import { constants } from 'node:fs';
 import { access, cp, lstat, mkdir, readdir, rename, rm, rmdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import type { DirectoryListing, FileEntry, SearchHit } from '../shared/types.js';
+import { assertEntryName } from '../shared/entry-name.js';
 import { sortEntries } from '../shared/files.js';
+
+/** Windows and macOS file systems ignore case by default. */
+const CASE_INSENSITIVE = process.platform === 'win32' || process.platform === 'darwin';
+
+/** Do two resolved paths name the same location? */
+export function samePath(a: string, b: string): boolean {
+  return CASE_INSENSITIVE ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+/** Is `child` strictly inside `parent`? Both must already be resolved. */
+export function isInside(child: string, parent: string): boolean {
+  const rel = CASE_INSENSITIVE ? relative(parent.toLowerCase(), child.toLowerCase()) : relative(parent, child);
+  return Boolean(rel) && !rel.startsWith('..') && !isAbsolute(rel);
+}
+
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null ? (error as NodeJS.ErrnoException).code : undefined;
+}
 
 export function resolveLocalPath(input: unknown): string {
   if (typeof input !== 'string' || !input) throw new Error('A filesystem path is required.');
@@ -101,23 +120,35 @@ export async function searchLocalShallow(
 }
 
 export async function createLocalDirectory(path: string): Promise<void> {
-  await mkdir(resolveLocalPath(path));
+  const target = resolveLocalPath(path);
+  assertEntryName(basename(target), process.platform);
+  await mkdir(target);
 }
 
+/** Rename within the same folder. Moving elsewhere goes through moveLocalEntry. */
 export async function renameLocalEntry(from: string, to: string): Promise<void> {
   const source = resolveLocalPath(from);
   const destination = resolveLocalPath(to);
-  const clash = await lstat(destination).then(
-    () => true,
-    () => false
-  );
-  if (clash) throw new Error('Something with that name already exists here.');
+  if (!samePath(dirname(source), dirname(destination))) {
+    throw new Error('Rename can only change the name; use move to change folder.');
+  }
+  assertEntryName(basename(destination), process.platform);
+  if (source === destination) return;
+  // On a case-insensitive disk, "readme.md" → "README.md" finds the source
+  // itself at the destination; that is not a clash.
+  if (!samePath(source, destination)) {
+    const clash = await lstat(destination).then(
+      () => true,
+      () => false
+    );
+    if (clash) throw new Error('Something with that name already exists here.');
+  }
   await rename(source, destination);
 }
 
 export async function removeLocalEntry(path: string, kind: FileEntry['kind']): Promise<void> {
   const target = resolveLocalPath(path);
-  if (target === resolve(homedir())) throw new Error('Refusing to delete the home directory.');
+  if (samePath(target, resolve(homedir()))) throw new Error('Refusing to delete the home directory.');
   if (kind === 'directory') await rmdir(target);
   else await rm(target, { force: false });
 }
@@ -150,22 +181,47 @@ async function uniqueDestination(toDir: string, name: string): Promise<string> {
 export async function copyLocalEntry(from: string, toDir: string): Promise<string> {
   const source = resolveLocalPath(from);
   const name = basename(source);
-  const destination = await uniqueDestination(toDir, name);
-  if (resolve(dirname(destination)) === source || destination.startsWith(source + sep)) {
+  const targetDir = resolveLocalPath(toDir);
+  if (samePath(targetDir, source) || isInside(targetDir, source)) {
     throw new Error('Cannot copy a folder into itself.');
   }
+  const destination = await uniqueDestination(targetDir, name);
   await cp(source, destination, { recursive: true, errorOnExist: true, force: false });
   return destination;
 }
 
-/** Move (rename into another directory); returns the new absolute path. */
+/**
+ * Move into another directory; returns the new absolute path.
+ *
+ * A rename cannot cross volumes (C: → D:, a network share), so on EXDEV the
+ * entry is copied and the original removed only once the copy has succeeded.
+ */
 export async function moveLocalEntry(from: string, toDir: string): Promise<string> {
   const source = resolveLocalPath(from);
   const name = basename(source);
-  const destination = await uniqueDestination(toDir, name);
-  if (resolve(toDir) === source || destination.startsWith(source + sep)) {
+  const targetDir = resolveLocalPath(toDir);
+  if (samePath(targetDir, source) || isInside(targetDir, source)) {
     throw new Error('Cannot move a folder into itself.');
   }
-  await rename(source, destination);
+  const destination = await uniqueDestination(targetDir, name);
+  try {
+    await rename(source, destination);
+    return destination;
+  } catch (error) {
+    if (errorCode(error) !== 'EXDEV') throw error;
+  }
+
+  await cp(source, destination, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+    preserveTimestamps: true
+  });
+  try {
+    await rm(source, { recursive: true, force: false });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Copied to ${destination}, but the original could not be removed: ${reason}`);
+  }
   return destination;
 }
