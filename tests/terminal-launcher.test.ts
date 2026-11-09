@@ -29,4 +29,17 @@ describe('terminal-launcher', () => {
       'C:\\work'
     ]);
   });
+
+  it('keeps a substituted path as a single argument', () => {
+    expect(expandCustomTerminalCommand('wt.exe -d {path}', 'C:\\My Projects\\a&b')).toEqual([
+      'wt.exe',
+      '-d',
+      'C:\\My Projects\\a&b'
+    ]);
+    expect(expandCustomTerminalCommand('term --dir={path} --new', 'C:\\My Dir')).toEqual([
+      'term',
+      '--dir=C:\\My Dir',
+      '--new'
+    ]);
+  });
 });

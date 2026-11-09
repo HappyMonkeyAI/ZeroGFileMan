@@ -18,6 +18,7 @@ import {
   joinLocal,
   parentLocal
 } from '../shared/files.js';
+import { runReported } from '../shared/file-op.js';
 import { fuzzyMatchEntries, fuzzyMatchHits, parseActionCommand } from '../shared/fuzzy-path.js';
 import {
   canGoBack,
@@ -426,9 +427,15 @@ function FilePane(props: {
   const doNewFolder = useCallback(async () => {
     const name = window.prompt('New folder name', 'New Folder');
     if (!name?.trim()) return;
-    await api().createLocalDirectory(joinLocal(pane.path, name.trim()));
-    await navigateTo(pane.path);
-    onLog(`[${stamp()}] mkdir ${name.trim()}`);
+    await runReported(
+      `New folder “${name.trim()}”`,
+      async () => {
+        await api().createLocalDirectory(joinLocal(pane.path, name.trim()));
+        await navigateTo(pane.path);
+        onLog(`[${stamp()}] mkdir ${name.trim()}`);
+      },
+      onLog
+    );
   }, [navigateTo, onLog, pane.path]);
 
   const doRename = useCallback(async () => {
@@ -436,9 +443,15 @@ function FilePane(props: {
     if (!sel) return;
     const next = window.prompt('Rename to', sel.name);
     if (!next?.trim() || next.trim() === sel.name) return;
-    await api().renameLocalEntry(sel.path, joinLocal(pane.path, next.trim()));
-    await refresh();
-    onLog(`[${stamp()}] rename ${sel.name} → ${next.trim()}`);
+    await runReported(
+      `Rename “${sel.name}”`,
+      async () => {
+        await api().renameLocalEntry(sel.path, joinLocal(pane.path, next.trim()));
+        await refresh();
+        onLog(`[${stamp()}] rename ${sel.name} → ${next.trim()}`);
+      },
+      onLog
+    );
   }, [onLog, pane.path, refresh, requireSelection]);
 
   const doDelete = useCallback(async () => {
@@ -450,9 +463,15 @@ function FilePane(props: {
         : `Delete “${sel.name}”?`
     );
     if (!ok) return;
-    await api().removeLocalEntry(sel.path, sel.kind);
-    await refresh();
-    onLog(`[${stamp()}] delete ${sel.name}`);
+    await runReported(
+      `Delete “${sel.name}”`,
+      async () => {
+        await api().removeLocalEntry(sel.path, sel.kind);
+        await refresh();
+        onLog(`[${stamp()}] delete ${sel.name}`);
+      },
+      onLog
+    );
   }, [onLog, refresh, requireSelection]);
 
   const doCopyClip = useCallback(
@@ -2201,6 +2220,12 @@ function App() {
       </footer>
     </div>
   );
+}
+
+// Dropping a file onto the window would otherwise make Chromium open it in
+// place of the app (main also blocks the navigation). Swallow stray drops.
+for (const type of ['dragover', 'drop'] as const) {
+  document.addEventListener(type, (event) => event.preventDefault());
 }
 
 createRoot(document.getElementById('root')!).render(

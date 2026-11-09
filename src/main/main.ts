@@ -1,8 +1,17 @@
-import { app, BrowserWindow, clipboard, ipcMain, safeStorage, session, shell } from 'electron';
-import { spawn } from 'node:child_process';
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  ipcMain,
+  safeStorage,
+  session,
+  shell,
+  type IpcMainInvokeEvent
+} from 'electron';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { isAppUrl, type AppLocation } from './app-origin.js';
 import { installApplicationMenu } from './app-menu.js';
 import { addFavorite, listFavorites, removeFavorite } from './favorites-store.js';
 import {
@@ -17,6 +26,7 @@ import {
   searchLocalShallow
 } from './local-fs.js';
 import { defaultSecretsPath, SecretStore, SPEECH_API_KEY } from './secret-store.js';
+import { spawnDetached } from './safe-spawn.js';
 import { openSystemTerminal, openTerminalForPath } from './terminal-launch.js';
 import { readThumbnail } from './thumbnails.js';
 import type { FileEntry, SpeechApiKeyStatus } from '../shared/types.js';
@@ -40,6 +50,12 @@ async function speechKeyStatus(): Promise<SpeechApiKeyStatus> {
   };
 }
 
+const distIndex = join(root, 'dist', 'renderer', 'index.html');
+const appLocation: AppLocation =
+  existsSync(distIndex) && !process.env.VITE_DEV_SERVER_URL
+    ? { kind: 'file', url: pathToFileURL(distIndex).href }
+    : { kind: 'dev', url: process.env.VITE_DEV_SERVER_URL ?? 'http://127.0.0.1:5174/' };
+
 function createWindow(): void {
   const iconPath = join(root, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
   mainWindow = new BrowserWindow({
@@ -58,61 +74,85 @@ function createWindow(): void {
     }
   });
 
-  const distIndex = join(root, 'dist', 'renderer', 'index.html');
-  if (existsSync(distIndex) && !process.env.VITE_DEV_SERVER_URL) {
+  // The preload stays attached across navigations, so the window may only ever
+  // show the app itself: no dropped files, links, redirects or popups.
+  const blockForeign = (event: Electron.Event, url: string) => {
+    if (!isAppUrl(url, appLocation)) {
+      event.preventDefault();
+      console.warn(`Blocked navigation to ${url}`);
+    }
+  };
+  mainWindow.webContents.on('will-navigate', blockForeign);
+  mainWindow.webContents.on('will-redirect', blockForeign);
+  mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  if (appLocation.kind === 'file') {
     void mainWindow.loadFile(distIndex);
   } else {
-    const url = process.env.VITE_DEV_SERVER_URL ?? 'http://127.0.0.1:5174/';
-    void mainWindow.loadURL(url);
+    void mainWindow.loadURL(appLocation.url);
   }
 }
 
 installApplicationMenu(() => mainWindow);
+
+/** ipcMain.handle, but only for calls from the app's own page. */
+function handle(
+  channel: string,
+  listener: (event: IpcMainInvokeEvent, ...args: any[]) => unknown
+): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isAppUrl(event.senderFrame?.url, appLocation)) {
+      throw new Error(`Refused ${channel} from an untrusted page.`);
+    }
+    return listener(event, ...args);
+  });
+}
 
 function asKind(value: unknown): FileEntry['kind'] {
   if (value === 'directory' || value === 'symlink' || value === 'file') return value;
   throw new Error('Invalid entry kind.');
 }
 
-ipcMain.handle('fs:home', () => localHome());
-ipcMain.handle('favorites:list', () => listFavorites());
-ipcMain.handle('favorites:add', (_e, path: unknown, label?: unknown) => addFavorite(path, label));
-ipcMain.handle('favorites:remove', (_e, path: unknown) => removeFavorite(path));
-ipcMain.handle('fs:list', (_e, path?: unknown) =>
+handle('fs:home', () => localHome());
+handle('favorites:list', () => listFavorites());
+handle('favorites:add', (_e, path: unknown, label?: unknown) => addFavorite(path, label));
+handle('favorites:remove', (_e, path: unknown) => removeFavorite(path));
+handle('fs:list', (_e, path?: unknown) =>
   listLocalDirectory(typeof path === 'string' ? path : undefined)
 );
-ipcMain.handle('fs:search', (_e, path: unknown, maxDepth?: unknown) =>
+handle('fs:search', (_e, path: unknown, maxDepth?: unknown) =>
   searchLocalShallow(String(path), typeof maxDepth === 'number' ? maxDepth : 2)
 );
-ipcMain.handle('fs:thumbnail', (_e, path: unknown, maxEdge?: unknown) =>
+handle('fs:thumbnail', (_e, path: unknown, maxEdge?: unknown) =>
   readThumbnail(path, typeof maxEdge === 'number' ? maxEdge : 256)
 );
-ipcMain.handle('fs:mkdir', (_e, path: unknown) => createLocalDirectory(String(path)));
-ipcMain.handle('fs:rename', (_e, from: unknown, to: unknown) =>
+handle('fs:mkdir', (_e, path: unknown) => createLocalDirectory(String(path)));
+handle('fs:rename', (_e, from: unknown, to: unknown) =>
   renameLocalEntry(String(from), String(to))
 );
-ipcMain.handle('fs:remove', (_e, path: unknown, kind: unknown) =>
+handle('fs:remove', (_e, path: unknown, kind: unknown) =>
   removeLocalEntry(String(path), asKind(kind))
 );
-ipcMain.handle('fs:copy', (_e, from: unknown, toDir: unknown) =>
+handle('fs:copy', (_e, from: unknown, toDir: unknown) =>
   copyLocalEntry(String(from), String(toDir))
 );
-ipcMain.handle('fs:move', (_e, from: unknown, toDir: unknown) =>
+handle('fs:move', (_e, from: unknown, toDir: unknown) =>
   moveLocalEntry(String(from), String(toDir))
 );
-ipcMain.handle('clipboard:write', (_e, text: unknown) => {
+handle('clipboard:write', (_e, text: unknown) => {
   if (typeof text !== 'string') throw new Error('Clipboard text required.');
   clipboard.writeText(text);
 });
-ipcMain.handle('shell:openPath', async (_e, path: unknown) => {
+handle('shell:openPath', async (_e, path: unknown) => {
   const target = resolveLocalPath(path);
   const err = await shell.openPath(target);
   if (err) throw new Error(err);
 });
-ipcMain.handle('shell:showItem', (_e, path: unknown) => {
+handle('shell:showItem', (_e, path: unknown) => {
   shell.showItemInFolder(resolveLocalPath(path));
 });
-ipcMain.handle('shell:openWith', async (_e, path: unknown, appName: unknown) => {
+handle('shell:openWith', async (_e, path: unknown, appName: unknown) => {
   const target = resolveLocalPath(path);
   const which = typeof appName === 'string' ? appName.trim().toLowerCase() : 'default';
 
@@ -121,12 +161,11 @@ ipcMain.handle('shell:openWith', async (_e, path: unknown, appName: unknown) => 
     return;
   }
   if (which === 'notepad' && process.platform === 'win32') {
-    spawn('notepad.exe', [target], { detached: true, stdio: 'ignore' }).unref();
+    spawnDetached('notepad.exe', [target]);
     return;
   }
   if (which === 'cursor') {
-    const cmd = process.platform === 'win32' ? 'cursor.cmd' : 'cursor';
-    spawn(cmd, [target], { detached: true, stdio: 'ignore', shell: true }).unref();
+    spawnDetached(process.platform === 'win32' ? 'cursor.cmd' : 'cursor', [target]);
     return;
   }
   if (which === 'terminal') {
@@ -138,7 +177,7 @@ ipcMain.handle('shell:openWith', async (_e, path: unknown, appName: unknown) => 
   if (err) throw new Error(err);
 });
 
-ipcMain.handle('shell:openTerminal', (_e, path: unknown, options?: unknown) => {
+handle('shell:openTerminal', (_e, path: unknown, options?: unknown) => {
   const opts =
     options && typeof options === 'object'
       ? (options as { launcher?: unknown; customCommand?: unknown })
@@ -150,8 +189,8 @@ ipcMain.handle('shell:openTerminal', (_e, path: unknown, options?: unknown) => {
   });
 });
 
-ipcMain.handle('speechKey:status', () => speechKeyStatus());
-ipcMain.handle('speechKey:save', async (_event, key: unknown) => {
+handle('speechKey:status', () => speechKeyStatus());
+handle('speechKey:save', async (_event, key: unknown) => {
   const value = typeof key === 'string' ? key.trim() : '';
   if (!value) {
     sessionSpeechKey = null;
@@ -167,16 +206,16 @@ ipcMain.handle('speechKey:save', async (_event, key: unknown) => {
   }
   return speechKeyStatus();
 });
-ipcMain.handle('speechKey:clear', async () => {
+handle('speechKey:clear', async () => {
   sessionSpeechKey = null;
   await secrets.clear(SPEECH_API_KEY);
   return speechKeyStatus();
 });
-ipcMain.handle('speechKey:read', async () => (await secrets.get(SPEECH_API_KEY)) ?? sessionSpeechKey);
+handle('speechKey:read', async () => (await secrets.get(SPEECH_API_KEY)) ?? sessionSpeechKey);
 
 app.whenReady().then(() => {
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(permission === 'media');
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(permission === 'media' && isAppUrl(webContents.getURL(), appLocation));
   });
   createWindow();
 });

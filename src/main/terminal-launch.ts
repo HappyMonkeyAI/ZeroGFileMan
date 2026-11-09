@@ -1,9 +1,9 @@
-import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { expandCustomTerminalCommand, type TerminalLauncher } from '../shared/terminal-launcher.js';
 import { resolveLocalPath } from './local-fs.js';
+import { spawnDetached } from './safe-spawn.js';
 
 export type OpenTerminalRequest = {
   path: unknown;
@@ -11,44 +11,25 @@ export type OpenTerminalRequest = {
   customCommand?: unknown;
 };
 
-function spawnDetached(
-  command: string,
-  args: string[],
-  options: { cwd?: string; shell?: boolean } = {}
-): void {
-  const child = spawn(command, args, {
-    detached: true,
-    stdio: 'ignore',
-    cwd: options.cwd,
-    shell: options.shell ?? false,
-    env: {
-      ...process.env,
-      ZEROG_OPEN_CWD: options.cwd ?? ''
-    }
-  });
-  child.on('error', (error) => {
-    console.error(`Terminal launch failed (${command}): ${error.message}`);
-  });
-  child.unref();
+/** Cold-start fallback for ZeroG Term: the directory also travels in the child env. */
+function cwdEnv(absolutePath: string): Record<string, string> {
+  return { ZEROG_OPEN_CWD: absolutePath };
 }
 
 export function openSystemTerminal(absolutePath: string): void {
   if (process.platform === 'win32') {
-    const child = spawn('wt.exe', ['-d', absolutePath], { detached: true, stdio: 'ignore' });
-    child.on('error', () => {
-      spawnDetached('cmd.exe', [
-        '/c',
-        'start',
-        'powershell',
-        '-NoExit',
-        '-Command',
-        `Set-Location -LiteralPath '${absolutePath.replace(/'/g, "''")}'`
-      ]);
+    // Without Windows Terminal, PowerShell starts in the directory via cwd, so
+    // the path is never part of a command line.
+    spawnDetached('wt.exe', ['-d', absolutePath], {
+      onError: () => spawnDetached('powershell.exe', ['-NoExit'], { cwd: absolutePath })
     });
-    child.unref();
     return;
   }
-  spawnDetached('x-terminal-emulator', ['--working-directory', absolutePath]);
+  if (process.platform === 'darwin') {
+    spawnDetached('open', ['-a', 'Terminal', absolutePath]);
+    return;
+  }
+  spawnDetached('x-terminal-emulator', ['--working-directory', absolutePath], { cwd: absolutePath });
 }
 
 function packagedZeroGTermPaths(): string[] {
@@ -69,7 +50,7 @@ export function openZeroGTerm(absolutePath: string): void {
   const cwdArgs = ['--cwd', absolutePath];
   for (const exe of packagedZeroGTermPaths()) {
     if (existsSync(exe)) {
-      spawnDetached(exe, cwdArgs, { cwd: absolutePath });
+      spawnDetached(exe, cwdArgs, { cwd: absolutePath, env: cwdEnv(absolutePath) });
       return;
     }
   }
@@ -77,17 +58,17 @@ export function openZeroGTerm(absolutePath: string): void {
   const devRoot = join(homedir(), 'Documents', 'development', 'zerogterm');
   if (existsSync(join(devRoot, 'package.json'))) {
     const electronCmd = process.platform === 'win32' ? 'electron.cmd' : 'electron';
-    spawnDetached(electronCmd, ['.', ...cwdArgs], { cwd: devRoot, shell: true });
+    spawnDetached(electronCmd, ['.', ...cwdArgs], { cwd: devRoot, env: cwdEnv(absolutePath) });
     return;
   }
 
   const cli = process.platform === 'win32' ? 'zerogterm.cmd' : 'zerogterm';
-  spawnDetached(cli, cwdArgs, { cwd: absolutePath, shell: true });
+  spawnDetached(cli, cwdArgs, { cwd: absolutePath, env: cwdEnv(absolutePath) });
 }
 
 export function openCustomTerminal(absolutePath: string, customCommand: string): void {
   const [command, ...args] = expandCustomTerminalCommand(customCommand, absolutePath);
-  spawnDetached(command, args, { cwd: absolutePath, shell: process.platform === 'win32' });
+  spawnDetached(command, args, { cwd: absolutePath, env: cwdEnv(absolutePath) });
 }
 
 export function openTerminalForPath(request: OpenTerminalRequest): void {

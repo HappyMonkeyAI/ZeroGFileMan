@@ -36,10 +36,13 @@ export function parseTerminalPrefs(raw: unknown): TerminalPrefs {
 export function expandCustomTerminalCommand(template: string, absolutePath: string): string[] {
   const trimmed = template.trim();
   if (!trimmed) throw new Error('Custom terminal command is empty.');
+  // Split the user's template first, then substitute: the path is data and must
+  // stay one argument even when it contains spaces or quotes.
+  const tokens = splitCommandLine(trimmed);
   if (trimmed.includes('{path}')) {
-    return splitCommandLine(trimmed.split('{path}').join(absolutePath));
+    return tokens.map((token) => token.split('{path}').join(absolutePath));
   }
-  return [...splitCommandLine(trimmed), absolutePath];
+  return [...tokens, absolutePath];
 }
 
 /** Minimal Windows/POSIX-ish split that respects double quotes. */
