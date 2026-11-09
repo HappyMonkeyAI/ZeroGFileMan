@@ -86,5 +86,8 @@
     "portable": {
       "artifactName": "ZeroGFileMan-${version}-Portable.${ext}"
     }
+  },
+  "allowScripts": {
+    "electron@43.8.4": true
   }
 }

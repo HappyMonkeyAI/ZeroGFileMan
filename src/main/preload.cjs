@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('fileman', {
   saveSpeechApiKey: (key) => ipcRenderer.invoke('speechKey:save', key),
   clearSpeechApiKey: () => ipcRenderer.invoke('speechKey:clear'),
   readSpeechApiKey: () => ipcRenderer.invoke('speechKey:read'),
+  showContextMenu: (target) => ipcRenderer.invoke('contextMenu:show', target),
   onMenuCommand: (callback) => {
     const handler = (_event, command) => callback(command);
     ipcRenderer.on('menu:command', handler);

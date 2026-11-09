@@ -1,4 +1,5 @@
 import type { Favorite } from './favorites.js';
+import type { ContextMenuTarget } from './context-menu.js';
 import type { TerminalLauncher } from './terminal-launcher.js';
 
 export type { Favorite };
@@ -91,6 +92,8 @@ export interface FileManApi {
   saveSpeechApiKey(key: string): Promise<SpeechApiKeyStatus>;
   clearSpeechApiKey(): Promise<SpeechApiKeyStatus>;
   readSpeechApiKey(): Promise<string | null>;
+  /** Pop up the native right-click menu; picks arrive via onMenuCommand. */
+  showContextMenu(target: ContextMenuTarget): Promise<void>;
   onMenuCommand(callback: (command: MenuCommand) => void): () => void;
 }
 

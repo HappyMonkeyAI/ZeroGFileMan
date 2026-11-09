@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent
 } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -18,7 +19,8 @@ import {
   joinLocal,
   parentLocal
 } from '../shared/files.js';
-import { runReported } from '../shared/file-op.js';
+import type { ContextMenuTargetKind } from '../shared/context-menu.js';
+import { describeError, runReported } from '../shared/file-op.js';
 import { fuzzyMatchEntries, fuzzyMatchHits, parseActionCommand } from '../shared/fuzzy-path.js';
 import {
   canGoBack,
@@ -209,6 +211,12 @@ type PaneCommands = {
   navigateFuzzy: (query: string) => void;
   voiceNavigate: () => void;
   voiceAction: () => void;
+  /** Context-menu actions on the selected entry. */
+  openItem: () => void;
+  openCursor: () => void;
+  copyItemPath: () => void;
+  terminalItem: () => void;
+  selectedItemPath: () => string | null;
 };
 
 function historyOf(pane: PaneState): HistoryState {
@@ -298,6 +306,15 @@ function FilePane(props: {
     onRefreshPeer,
     onRegisterCommands
   } = props;
+
+  const showMenu = useCallback(
+    (kind: ContextMenuTargetKind) => {
+      void api()
+        .showContextMenu({ kind, canPaste: Boolean(clipboard), canTransfer: otherPath !== pane.path })
+        .catch((error: unknown) => onLog(`Context menu failed: ${describeError(error)}`));
+    },
+    [clipboard, onLog, otherPath, pane.path]
+  );
 
   const openTerminalHere = useCallback(
     (dir: string) =>
@@ -857,7 +874,42 @@ function FilePane(props: {
       forward: () => void goForward(),
       navigateFuzzy: (query: string) => void applyNavigate(query),
       voiceNavigate: () => void toggleJewel('navigate'),
-      voiceAction: () => void toggleJewel('action')
+      voiceAction: () => void toggleJewel('action'),
+      openItem: () => {
+        const sel = requireSelection();
+        if (!sel) return;
+        if (sel.kind === 'directory' || sel.kind === 'symlink') void navigateTo(sel.path);
+        else void runReported(`Open “${sel.name}”`, () => api().openPath(sel.path), onLog);
+      },
+      openCursor: () => {
+        const sel = requireSelection();
+        if (sel) void runReported(`Open “${sel.name}” with Cursor`, () => api().openWith(sel.path, 'cursor'), onLog);
+      },
+      copyItemPath: () => {
+        const sel = requireSelection();
+        if (!sel) return;
+        void runReported(
+          'Copy path',
+          async () => {
+            await api().copyText(sel.path);
+            onLog(`[${stamp()}] copy path ${sel.path}`);
+          },
+          onLog
+        );
+      },
+      terminalItem: () => {
+        const sel = requireSelection();
+        const dir = sel && sel.kind !== 'file' ? sel.path : pane.path;
+        void runReported(
+          'Open terminal',
+          async () => {
+            await openTerminalHere(dir);
+            onLog(`[${stamp()}] terminal ${dir} (${terminalPrefs.launcher})`);
+          },
+          onLog
+        );
+      },
+      selectedItemPath: () => requireSelection()?.path ?? null
     });
     return () => onRegisterCommands(null);
   }, [
@@ -1033,6 +1085,12 @@ function FilePane(props: {
                 '--tile-size': `${pane.viewMode === 'thumbnails' ? thumbPixelSize(pane.viewScale) : iconPixelSize(pane.viewScale)}px`
               } as CSSProperties)
         }
+        onContextMenu={(event) => {
+          // Empty space (or the ".." row): folder-level actions, nothing selected.
+          event.preventDefault();
+          if (pane.selected) onChange({ ...pane, selected: null });
+          showMenu('background');
+        }}
         onWheel={(event) => {
           if (!(event.ctrlKey || event.metaKey)) return;
           event.preventDefault();
@@ -1072,6 +1130,12 @@ function FilePane(props: {
           const match = pane.matchNames.has(entry.name);
           const kindIcon = entry.kind === 'directory' ? 'folder' : entry.kind === 'symlink' ? 'link' : 'file';
           const fullPath = joinLocal(pane.path, entry.name);
+          const onEntryContextMenu = (event: ReactMouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!selected) onChange({ ...pane, selected: entry.name });
+            showMenu(entry.kind);
+          };
           const openEntry = () => {
             if (entry.kind === 'directory' || entry.kind === 'symlink') {
               void navigateTo(fullPath);
@@ -1087,6 +1151,7 @@ function FilePane(props: {
                 className={`entry${selected ? ' selected' : ''}${match ? ' match' : ''}`}
                 onClick={() => onChange({ ...pane, selected: entry.name })}
                 onDoubleClick={openEntry}
+                onContextMenu={onEntryContextMenu}
               >
                 <span className={`name${entry.kind === 'directory' ? ' dir' : ''}`}>
                   <Icon name={kindIcon} />
@@ -1107,6 +1172,7 @@ function FilePane(props: {
               title={`${entry.name}\n${formatSize(entry)}`}
               onClick={() => onChange({ ...pane, selected: entry.name })}
               onDoubleClick={openEntry}
+              onContextMenu={onEntryContextMenu}
             >
               {pane.viewMode === 'thumbnails' && isThumbnailCandidate(entry.name, entry.size, entry.kind) ? (
                 <EntryThumbnail
@@ -1267,13 +1333,14 @@ function App() {
     [active, pushLog]
   );
 
-  const addCurrentFavorite = useCallback(async () => {
+  const addCurrentFavorite = useCallback(async (path?: string) => {
     const pane = active === 'left' ? left : right;
-    if (!pane) return;
+    const target = path ?? pane?.path;
+    if (!target) return;
     try {
-      const next = await api().addFavorite(pane.path);
+      const next = await api().addFavorite(target);
       setFavorites(next);
-      pushLog(`[${stamp()}] favorite + ${pane.path}`);
+      pushLog(`[${stamp()}] favorite + ${target}`);
     } catch (error) {
       pushLog(error instanceof Error ? error.message : String(error));
     }
@@ -1494,6 +1561,23 @@ function App() {
         case 'go:add-favorite':
           void addCurrentFavorite();
           break;
+        case 'item:open':
+          c?.openItem();
+          break;
+        case 'item:open-cursor':
+          c?.openCursor();
+          break;
+        case 'item:copy-path':
+          c?.copyItemPath();
+          break;
+        case 'item:terminal':
+          c?.terminalItem();
+          break;
+        case 'item:favorite': {
+          const target = c?.selectedItemPath();
+          if (target) void addCurrentFavorite(target);
+          break;
+        }
         case 'voice:navigate':
           c?.voiceNavigate();
           break;

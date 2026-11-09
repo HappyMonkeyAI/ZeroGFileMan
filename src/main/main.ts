@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   clipboard,
   ipcMain,
+  Menu,
   safeStorage,
   session,
   shell,
@@ -11,6 +12,7 @@ import {
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { buildContextMenu, parseContextMenuTarget } from '../shared/context-menu.js';
 import { isAppUrl, type AppLocation } from './app-origin.js';
 import { installApplicationMenu } from './app-menu.js';
 import { addFavorite, listFavorites, removeFavorite } from './favorites-store.js';
@@ -187,6 +189,26 @@ handle('shell:openTerminal', (_e, path: unknown, options?: unknown) => {
     launcher: opts.launcher,
     customCommand: opts.customCommand
   });
+});
+
+handle('contextMenu:show', (event, raw: unknown) => {
+  const target = parseContextMenuTarget(raw);
+  const window = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+  const menu = Menu.buildFromTemplate(
+    buildContextMenu(target, process.platform).map((entry) =>
+      entry.type === 'separator'
+        ? { type: 'separator' as const }
+        : {
+            label: entry.label,
+            enabled: entry.enabled ?? true,
+            accelerator: entry.accelerator,
+            // Shortcut hints only; the renderer and app menu own the real bindings.
+            registerAccelerator: false,
+            click: () => event.sender.send('menu:command', entry.command)
+          }
+    )
+  );
+  menu.popup({ window });
 });
 
 handle('speechKey:status', () => speechKeyStatus());
