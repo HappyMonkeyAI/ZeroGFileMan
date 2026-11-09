@@ -2,7 +2,7 @@
 
 ## Current
 
-Review follow-ups (branch `fix/review-followups`): cross-drive moves, case-only renames, entry-name checks, OS thumbnailer, server speech via main (ADR-0005).
+Code-review hardening merged (#1, #2). Open check: builtin Whisper model download under the narrowed CSP `connect-src` (ADR-0005) — if it fails, allow the host named in the console CSP error.
 
 ## Delivered
 
