@@ -2,7 +2,9 @@
 
 ## Current
 
-Code-review hardening merged (#1, #2). Open check: builtin Whisper model download under the narrowed CSP `connect-src` (ADR-0005) — if it fails, allow the host named in the console CSP error.
+Public on GitHub since 2026-11-10 (HappyMonkeyAI/ZeroGFileMan, MIT). The history was rewritten before publishing: personal email only, no LAN IPs or home paths. The pre-public history and code-review PRs #1–#3 are in the archived private repo `HappyMonkeyAI/ZeroGFileMan-archive`. PR numbers in this repo restart at #1.
+
+Open check: builtin Whisper model download under the narrowed CSP `connect-src` (ADR-0005). If it fails, allow the host named in the console CSP error.
 
 ## Delivered
 
@@ -14,9 +16,14 @@ Code-review hardening merged (#1, #2). Open check: builtin Whisper model downloa
 - Server speech requests made by main; key never reaches the renderer; CSP `connect-src` narrowed (ADR-0005)
 - Right-click context menu on entries and empty listing space (native menu; `src/shared/context-menu.ts`)
 - Security: filenames can no longer inject cmd.exe syntax via Open with / terminal launchers; dropped files and foreign pages cannot reach `window.fileman`
+- Public release prep (#1): SECURITY.md (private vulnerability reporting enabled), CONTRIBUTING.md, README unsigned-build/SmartScreen note, repo topics
+- Fonts bundled via `@fontsource-variable/*`, no Google Fonts; CSP `font-src 'self'`; OFL text in THIRD-PARTY-NOTICES.md, shipped in the package (#2)
+- Speech settings show endpoint warnings under Server URL: invalid URL, key over plain http off-machine, speech leaving the machine (`endpointNotices`, #2)
+- SonarCloud removed for this repo: both FileMan projects deleted in the happymonkeyai SonarCloud org; the org-wide GitHub app is unchanged
 
 ## Next
 
+- Confirm the next PR shows no SonarCloud check. If one appears, SonarCloud is auto-importing new repos; turn that off in the SonarCloud org settings.
 - Later: D5 Pro Commander deck / themes
 - Optional: SFTP pane
 
