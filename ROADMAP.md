@@ -1,6 +1,6 @@
 # ROADMAP — ZeroG FileMan
 
-Private repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan)
+Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan)
 
 ## Status
 

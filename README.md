@@ -2,7 +2,7 @@
 
 Local-first, multi-pane developer file manager with **dual voice jewels** per pane (Navigate / Action). Sister to [ZeroG Terminal](https://github.com/HappyMonkeyAI/ZeroGTerm) and ZeroG SFTP — greenfield app, not a fork.
 
-**Repo:** [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan) (private)
+**Repo:** [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan)
 
 ## Quick start (dev)
 
