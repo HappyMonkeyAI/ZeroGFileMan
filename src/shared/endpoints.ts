@@ -1,10 +1,9 @@
 // What counts as an endpoint ZeroG will make a request to, and what is worth
 // saying about one before it is used.
 //
-// Shared rather than owned by the speech side because the AI suggestion path now
-// asks the same three questions of the same kind of URL, and the answers must
-// match: a settings panel that warns a key travels in the clear for one feature
-// and not the other would be worse than either behaviour on its own.
+// Shared rather than owned by the speech side so that any future feature that
+// calls a user-configured endpoint asks the same questions and gets the same
+// answers — and the settings panel says the same things about it.
 //
 // The host is the operator's choice — loopback, the LAN, or a hosted service —
 // and nothing here refuses one on that basis. What is enforced is the shape: an
@@ -50,7 +49,7 @@ export function isSupportedEndpoint(url: string): boolean {
  * Does this endpoint keep the payload on this machine?
  *
  * Nothing is refused on this basis; the settings panel uses it to say plainly
- * when recorded speech or terminal output is about to leave the machine.
+ * when recorded speech is about to leave the machine.
  * `*.localhost` resolves to loopback by specification, so it counts.
  */
 export function isLoopbackEndpoint(url: string): boolean {
@@ -71,4 +70,33 @@ export function sendsKeyInClear(url: string): boolean {
   const parsed = endpointOf(url);
   if (parsed === null) return false;
   return parsed.protocol === 'http:' && !isLoopbackEndpoint(url);
+}
+
+export type EndpointNotice = { tone: 'warn' | 'danger'; text: string };
+
+/**
+ * What the settings panel should say about a speech server URL, worst first.
+ *
+ * An empty field says nothing — it is not a mistake yet. `hasKey` is whether a
+ * key is saved or typed: the clear-text warning is only worth showing when there
+ * is a key to leak.
+ */
+export function endpointNotices(url: string, hasKey: boolean): EndpointNotice[] {
+  const trimmed = url.trim();
+  if (trimmed === '') return [];
+  const parsed = endpointOf(trimmed);
+  if (parsed === null) {
+    return [{ tone: 'danger', text: 'Not an http(s) URL with a host — transcription requests will be refused.' }];
+  }
+  const notices: EndpointNotice[] = [];
+  if (hasKey && sendsKeyInClear(trimmed)) {
+    notices.push({
+      tone: 'danger',
+      text: `Your API key will be sent unencrypted over http to ${parsed.host}. Use https.`
+    });
+  }
+  if (!isLoopbackEndpoint(trimmed)) {
+    notices.push({ tone: 'warn', text: `Recorded speech leaves this machine: it is sent to ${parsed.host}.` });
+  }
+  return notices;
 }

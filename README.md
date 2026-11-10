@@ -69,4 +69,4 @@ Signing is off (`signAndEditExecutable: false`). App id: `com.happymonkeyai.zero
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Bundled fonts are under the SIL Open Font License; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

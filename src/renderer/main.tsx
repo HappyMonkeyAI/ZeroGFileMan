@@ -21,6 +21,7 @@ import {
   parentLocal
 } from '../shared/files.js';
 import type { ContextMenuTargetKind } from '../shared/context-menu.js';
+import { endpointNotices } from '../shared/endpoints.js';
 import { entryNameProblem } from '../shared/entry-name.js';
 import { describeError, runReported } from '../shared/file-op.js';
 import { fuzzyMatchEntries, fuzzyMatchHits, parseActionCommand } from '../shared/fuzzy-path.js';
@@ -91,6 +92,10 @@ import {
 } from './themes.js';
 import { loadStoredTranscriptDrawer, storeTranscriptDrawer } from './transcript-prefs.js';
 import { isMostlySilence, VoiceRecorder } from './voice.js';
+// Fonts are bundled rather than fetched from Google Fonts, so a launch makes
+// no network request and the UI looks the same offline.
+import '@fontsource-variable/inter';
+import '@fontsource-variable/jetbrains-mono';
 import './styles.css';
 
 type VoicePhase = 'idle' | 'listening' | 'transcribing';
@@ -2229,6 +2234,18 @@ function App() {
                 </button>
               </div>
             </label>
+            {speechSettings.engine === 'server' ? (
+              <div className="endpoint-notices" role="status" aria-live="polite">
+                {endpointNotices(
+                  speechSettings.serverUrl,
+                  speechKeyStatus.stored || speechKeyDraft.trim() !== ''
+                ).map((notice) => (
+                  <div key={notice.text} className={`endpoint-notice endpoint-notice-${notice.tone}`}>
+                    {notice.text}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
         {!transcriptDrawer.collapsed || speechSettingsOpen ? (
