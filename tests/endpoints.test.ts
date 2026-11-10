@@ -14,6 +14,8 @@ describe('endpointNotices', () => {
       'http://127.0.0.1:8080/v1/audio/transcriptions',
       'http://localhost:8080/v1',
       'http://[::1]:8080/v1',
+      // Normalises to hostname `[::1]` — brackets included. Guards LOOPBACK_HOSTNAMES.
+      'http://[0:0:0:0:0:0:0:1]:8080/v1',
       'http://whisper.localhost/v1'
     ]) {
       expect(endpointNotices(url, true)).toEqual([]);

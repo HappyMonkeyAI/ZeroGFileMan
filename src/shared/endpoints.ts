@@ -10,6 +10,10 @@
 // http(s) URL with a host, so a typo or a file:// path cannot become a request.
 // See SECURITY.md.
 
+// `URL.hostname` keeps the brackets on IPv6 literals: `new URL('http://[::1]/')`
+// has hostname `[::1]`, and so does `[0:0:0:0:0:0:0:1]`. The bracketed entry is
+// the one that matches; do not "tidy" it away. Bare `::1` never comes out of
+// URL parsing and is kept only as a harmless belt-and-braces entry.
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
 /** The endpoint as a URL, or null when it is not one a request can be made to. */
