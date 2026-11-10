@@ -21,8 +21,8 @@
   --heading-bg: #0a101a;
   --input-bg: #070b12;
   --topbar: #080d16;
-  --font: 'Inter', 'Segoe UI', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  --font: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', 'Cascadia Code', Consolas, monospace;
 }
 
 :root[data-theme='light'] {
@@ -1128,6 +1128,32 @@ select {
 
 .speech-key-row input {
   flex: 1;
+}
+
+.endpoint-notices {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.endpoint-notices:empty {
+  display: none;
+}
+
+.endpoint-notice {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding-left: 6px;
+  border-left: 2px solid currentColor;
+}
+
+.endpoint-notice-warn {
+  color: var(--warn);
+}
+
+.endpoint-notice-danger {
+  color: var(--danger);
 }
 
 /* —— Status bar —— */
