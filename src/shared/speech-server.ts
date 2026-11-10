@@ -235,7 +235,7 @@ export async function transcribeViaServer(
   fetchImpl: typeof fetch = fetch
 ): Promise<string> {
   if (!isSupportedEndpoint(request.url)) {
-    throw new Error('Speech server URL must be an http:// or https:// address, e.g. http://10.0.10.46:8888/v1/audio/transcriptions');
+    throw new Error('Speech server URL must be an http:// or https:// address, e.g. http://127.0.0.1:8080/v1/audio/transcriptions');
   }
   if (!request.model.trim()) {
     throw new Error('Speech server model name is required');
