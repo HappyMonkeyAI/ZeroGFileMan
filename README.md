@@ -41,7 +41,11 @@ Artifacts land in `release/`:
 - `ZeroGFileMan-<version>-Setup.exe` — NSIS installer (choose install dir)
 - `ZeroGFileMan-<version>-Portable.exe` — portable single file
 
-Unsigned by default (`signAndEditExecutable: false`). App id: `com.happymonkeyai.zerogfileman`. Window/installer icon lives in `build/` (`npm run icon:render` regenerates png/ico from the SVG).
+Packaged builds are Windows x64 only for now.
+
+> **Unsigned builds.** The executables are not code-signed, so Windows SmartScreen will show "Windows protected your PC" the first time you run one. Choose **More info → Run anyway**, or build from source if you'd rather not trust a downloaded binary.
+
+Signing is off (`signAndEditExecutable: false`). App id: `com.happymonkeyai.zerogfileman`. Window/installer icon lives in `build/` (`npm run icon:render` regenerates png/ico from the SVG).
 
 ## What it does
 
@@ -60,7 +64,9 @@ Unsigned by default (`signAndEditExecutable: false`). App id: `com.happymonkeyai
 | [ROADMAP.md](ROADMAP.md) | Next slices (layouts, view modes, CI) |
 | [MCP.md](MCP.md) | Intent → MCP routing |
 | [docs/adr/](docs/adr/) | Decisions |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to build, test and send a PR |
+| [SECURITY.md](SECURITY.md) | Reporting vulnerabilities; what leaves your machine |
 
 ## License
 
-MIT
+[MIT](LICENSE)
