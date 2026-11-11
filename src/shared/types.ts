@@ -81,6 +81,8 @@ export interface FileManApi {
   copyLocalEntry(from: string, toDir: string): Promise<string>;
   moveLocalEntry(from: string, toDir: string): Promise<string>;
   homeDirectory(): Promise<string>;
+  /** Mounted drive roots (`C:\\`, …) for the pane drive picker. */
+  listLocalDrives(): Promise<string[]>;
   listFavorites(): Promise<Favorite[]>;
   addFavorite(path: string, label?: string): Promise<Favorite[]>;
   removeFavorite(path: string): Promise<Favorite[]>;

@@ -65,6 +65,7 @@ Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan
 | P3.3 | Collapsible transcript drawer | Height persist; collapse to one status line | done |
 | P3.4 | Column sort | Name / size / modified click-to-sort; persist per pane | done |
 | P3.5 | Listing view modes | Explorer-style **Details** / **Icons** / **Thumbnails**; per-pane toolbar; **Ctrl+wheel** zooms icon/thumbnail size | done |
+| P3.6 | Drive picker | Dropdown next to drive letter in pane path; lists mounted Windows roots | done |
 
 ### P4 — Packaging & polish
 
@@ -77,7 +78,7 @@ Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan
 
 ## Later / park
 
-- Multi-select + drag-drop between panes  
+- Drag-drop between panes (multi-select shipped)  
 - Recursive delete with explicit danger modal (default stays non-recursive)  
 - Permissions / owner columns (platform-accurate, not fake Unix on NTFS)  
 - Thumbnail generation caps (size/type allowlist; no decode of huge RAW by default)  
@@ -90,7 +91,7 @@ Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan
 
 ## Suggested next slice
 
-Later D5 Pro Commander deck polish; SFTP pane when needed.
+Later D5 Pro Commander deck polish; SFTP pane when needed. Drive picker shipped (P3.6).
 
 ## Task board seed
 

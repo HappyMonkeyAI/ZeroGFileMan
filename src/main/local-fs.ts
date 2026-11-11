@@ -40,6 +40,32 @@ export function localHome(): string {
   return homedir();
 }
 
+/**
+ * Roots the user can jump to from the pane drive picker.
+ *
+ * Windows: A–Z letters that respond within a short timeout (skips empty optical
+ * trays that would otherwise hang). Non-Windows: just `/`.
+ */
+export async function listLocalDrives(): Promise<string[]> {
+  if (process.platform !== 'win32') return ['/'];
+
+  const probe = async (root: string): Promise<string | null> => {
+    const ok = await Promise.race([
+      access(root, constants.F_OK)
+        .then(() => true)
+        .catch(() => false),
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), 250);
+      })
+    ]);
+    return ok ? root : null;
+  };
+
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const found = await Promise.all([...letters].map((letter) => probe(`${letter}:\\`)));
+  return found.filter((root): root is string => Boolean(root));
+}
+
 export async function listLocalDirectory(path?: string): Promise<DirectoryListing> {
   const target = path ? resolveLocalPath(path) : homedir();
   await access(target, constants.R_OK);

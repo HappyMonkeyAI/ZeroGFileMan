@@ -610,6 +610,84 @@ select {
   font-size: 11px;
 }
 
+.drive-picker {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.drive-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.drive-btn .icon-svg {
+  width: 12px;
+  height: 12px;
+}
+
+.drive-btn:hover,
+.drive-btn.open {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-soft);
+}
+
+.drive-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 72px;
+  max-height: 240px;
+  overflow: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 35%, transparent);
+}
+
+.drive-menu-empty {
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.drive-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.drive-option:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.drive-option.selected {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .crumb {
   background: transparent;
   border: none;

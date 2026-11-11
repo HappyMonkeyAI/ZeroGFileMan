@@ -10,6 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent
 } from 'react';
 import { createRoot } from 'react-dom/client';
+import { driveLetterLabel, windowsDriveRoot } from '../shared/drives.js';
 import {
   baseName,
   breadcrumbSegments,
@@ -49,6 +50,14 @@ import {
   type ListingSortDir,
   type ListingSortKey
 } from '../shared/listing-sort.js';
+import {
+  applyListingClick,
+  emptySelection,
+  exclusiveSelect,
+  primarySelected,
+  pruneSelection,
+  selectAll
+} from '../shared/pane-selection.js';
 import {
   clampSplitRatio,
   setLayout,
@@ -168,7 +177,10 @@ const speech = new SpeechClient({
 type PaneState = {
   path: string;
   entries: FileEntry[];
-  selected: string | null;
+  /** Ordered selection (last entry is the primary for single-target ops). */
+  selected: string[];
+  /** Anchor for Shift-range selection. */
+  selectionAnchor: string | null;
   matchNames: Set<string>;
   status: string;
   listening: VoiceMode | null;
@@ -190,11 +202,15 @@ function persistListing(side: 'left' | 'right', pane: PaneState): void {
   });
 }
 
-type FileClip = {
-  mode: 'copy' | 'cut';
+type FileClipItem = {
   path: string;
   kind: FileEntry['kind'];
   name: string;
+};
+
+type FileClip = {
+  mode: 'copy' | 'cut';
+  items: FileClipItem[];
 };
 
 type PaneCommands = {
@@ -216,6 +232,7 @@ type PaneCommands = {
   back: () => void;
   forward: () => void;
   navigateFuzzy: (query: string) => void;
+  selectAllVisible: () => void;
   voiceNavigate: () => void;
   voiceAction: () => void;
   /** Context-menu actions on the selected entry. */
@@ -241,6 +258,90 @@ function stamp(): string {
 async function loadPane(path?: string): Promise<Pick<PaneState, 'path' | 'entries'>> {
   const listing = await api().listLocalDirectory(path);
   return { path: listing.path, entries: listing.entries };
+}
+
+/** Drive letter dropdown beside the path root (Windows panes only). */
+function DrivePicker(props: {
+  currentRoot: string;
+  onSelect: (root: string) => void;
+}) {
+  const { currentRoot, onSelect } = props;
+  const [open, setOpen] = useState(false);
+  const [drives, setDrives] = useState<string[]>([currentRoot]);
+  const [loading, setLoading] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  const refreshDrives = useCallback(() => {
+    setLoading(true);
+    void api()
+      .listLocalDrives()
+      .then((next) => {
+        const roots = next.length ? next : [currentRoot];
+        if (!roots.some((root) => root.toLowerCase() === currentRoot.toLowerCase())) {
+          roots.unshift(currentRoot);
+        }
+        setDrives(roots);
+      })
+      .catch(() => setDrives([currentRoot]))
+      .finally(() => setLoading(false));
+  }, [currentRoot]);
+
+  useEffect(() => {
+    if (!open) return;
+    refreshDrives();
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [open, refreshDrives]);
+
+  return (
+    <div className="drive-picker" ref={rootRef}>
+      <button
+        type="button"
+        className={`drive-btn${open ? ' open' : ''}`}
+        title="Change drive"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>{driveLetterLabel(currentRoot)}</span>
+        <Icon name="chevron-down" />
+      </button>
+      {open ? (
+        <ul className="drive-menu" role="listbox" aria-label="Drives">
+          {loading && drives.length <= 1 ? (
+            <li className="drive-menu-empty">Scanning…</li>
+          ) : null}
+          {drives.map((root) => {
+            const selected = root.toLowerCase() === currentRoot.toLowerCase();
+            return (
+              <li key={root} role="option" aria-selected={selected}>
+                <button
+                  type="button"
+                  className={`drive-option${selected ? ' selected' : ''}`}
+                  onClick={() => {
+                    setOpen(false);
+                    if (!selected) onSelect(root);
+                  }}
+                >
+                  {driveLetterLabel(root)}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function ToolButton(props: {
@@ -333,6 +434,8 @@ function FilePane(props: {
   );
 
   const crumbs = useMemo(() => breadcrumbSegments(pane.path), [pane.path]);
+  const driveRoot = useMemo(() => windowsDriveRoot(pane.path), [pane.path]);
+  const pathCrumbs = driveRoot ? crumbs.slice(1) : crumbs;
   const visible = useMemo(() => {
     const q = pane.filter.trim().toLowerCase();
     const filtered = pane.entries.filter((e) => {
@@ -347,9 +450,20 @@ function FilePane(props: {
   const pendingStartRef = useRef<Promise<boolean> | null>(null);
   const limitTimerRef = useRef<number | null>(null);
   const [voicePhase, setVoicePhase] = useState<VoicePhase>('idle');
-  const selectedEntry = visible.find((e) => e.name === pane.selected) ?? null;
+  const selectedSet = useMemo(() => new Set(pane.selected), [pane.selected]);
+  const selectedEntries = useMemo(
+    () => visible.filter((entry) => selectedSet.has(entry.name)),
+    [selectedSet, visible]
+  );
+  const primaryName = primarySelected(pane.selected);
+  const selectedEntry = primaryName
+    ? (visible.find((e) => e.name === primaryName) ??
+        pane.entries.find((e) => e.name === primaryName) ??
+        null)
+    : null;
   const dirs = visible.filter((e) => e.kind === 'directory' || e.kind === 'symlink').length;
   const files = visible.length - dirs;
+  const visibleNames = useMemo(() => visible.map((entry) => entry.name), [visible]);
 
   const clearVoiceLimit = useCallback(() => {
     if (limitTimerRef.current != null) {
@@ -375,7 +489,7 @@ function FilePane(props: {
           ...pane,
           ...next,
           ...hist,
-          selected: null,
+          ...emptySelection(),
           matchNames: new Set(),
           status: next.path,
           listening: null
@@ -386,6 +500,31 @@ function FilePane(props: {
       }
     },
     [onChange, onLog, pane]
+  );
+
+  const setSelection = useCallback(
+    (next: { selected: string[]; selectionAnchor: string | null }) => {
+      onChange({
+        ...pane,
+        selected: next.selected,
+        selectionAnchor: next.selectionAnchor
+      });
+    },
+    [onChange, pane]
+  );
+
+  const selectEntry = useCallback(
+    (name: string, mods: { ctrl: boolean; shift: boolean }) => {
+      setSelection(
+        applyListingClick(
+          { selected: pane.selected, selectionAnchor: pane.selectionAnchor },
+          visibleNames,
+          name,
+          mods
+        )
+      );
+    },
+    [pane.selected, pane.selectionAnchor, setSelection, visibleNames]
   );
 
   const goBack = useCallback(async () => {
@@ -401,12 +540,17 @@ function FilePane(props: {
   }, [navigateTo, pane]);
 
   const refresh = useCallback(async () => {
-    const selected = pane.selected;
     const next = await loadPane(pane.path);
+    const existing = new Set(next.entries.map((entry) => entry.name));
+    const selected = pruneSelection(pane.selected, existing);
     onChange({
       ...pane,
       ...next,
-      selected: next.entries.some((e) => e.name === selected) ? selected : null,
+      selected,
+      selectionAnchor:
+        pane.selectionAnchor && existing.has(pane.selectionAnchor)
+          ? pane.selectionAnchor
+          : primarySelected(selected),
       status: `Refreshed ${next.path}`,
       listening: null
     });
@@ -425,27 +569,46 @@ function FilePane(props: {
     };
   }, [onLog, pane.path, selectedEntry]);
 
+  const requireSelections = useCallback((): FileClipItem[] | null => {
+    if (!selectedEntries.length) {
+      onLog('Select a file or folder first.');
+      return null;
+    }
+    return selectedEntries.map((entry) => ({
+      path: joinLocal(pane.path, entry.name),
+      kind: entry.kind,
+      name: entry.name
+    }));
+  }, [onLog, pane.path, selectedEntries]);
+
   const transferToOther = useCallback(
     async (mode: 'copy' | 'move') => {
-      const sel = requireSelection();
-      if (!sel) return;
+      const items = requireSelections();
+      if (!items) return;
       if (otherPath === pane.path) {
         onLog('Other pane is the same directory.');
         return;
       }
-      try {
-        const dest =
-          mode === 'copy'
-            ? await api().copyLocalEntry(sel.path, otherPath)
-            : await api().moveLocalEntry(sel.path, otherPath);
-        await refresh();
-        onRefreshPeer?.();
-        onLog(`[${stamp()}] ${mode} → other pane: ${baseName(dest)}`);
-      } catch (error) {
-        onLog(error instanceof Error ? error.message : String(error));
+      let ok = 0;
+      for (const item of items) {
+        try {
+          const dest =
+            mode === 'copy'
+              ? await api().copyLocalEntry(item.path, otherPath)
+              : await api().moveLocalEntry(item.path, otherPath);
+          ok += 1;
+          onLog(`[${stamp()}] ${mode} → other pane: ${baseName(dest)}`);
+        } catch (error) {
+          onLog(error instanceof Error ? error.message : String(error));
+        }
+      }
+      await refresh();
+      onRefreshPeer?.();
+      if (items.length > 1) {
+        onLog(`[${stamp()}] ${mode} → other pane: ${ok}/${items.length} done`);
       }
     },
-    [onLog, onRefreshPeer, otherPath, pane.path, refresh, requireSelection]
+    [onLog, onRefreshPeer, otherPath, pane.path, refresh, requireSelections]
   );
 
   const doNewFolder = useCallback(async () => {
@@ -489,52 +652,71 @@ function FilePane(props: {
   }, [onLog, pane.path, refresh, requireSelection]);
 
   const doDelete = useCallback(async () => {
-    const sel = requireSelection();
-    if (!sel) return;
-    const ok = window.confirm(
-      sel.kind === 'directory'
-        ? `Delete empty folder “${sel.name}”? (non-empty refused)`
-        : `Delete “${sel.name}”?`
-    );
-    if (!ok) return;
-    await runReported(
-      `Delete “${sel.name}”`,
-      async () => {
-        await api().removeLocalEntry(sel.path, sel.kind);
-        await refresh();
-        onLog(`[${stamp()}] delete ${sel.name}`);
-      },
-      onLog
-    );
-  }, [onLog, refresh, requireSelection]);
+    const items = requireSelections();
+    if (!items) return;
+    const label =
+      items.length === 1
+        ? items[0]!.kind === 'directory'
+          ? `Delete empty folder “${items[0]!.name}”? (non-empty refused)`
+          : `Delete “${items[0]!.name}”?`
+        : `Delete ${items.length} items? (non-empty folders refused)`;
+    if (!window.confirm(label)) return;
+    let ok = 0;
+    for (const item of items) {
+      try {
+        await api().removeLocalEntry(item.path, item.kind);
+        ok += 1;
+        onLog(`[${stamp()}] delete ${item.name}`);
+      } catch (error) {
+        onLog(error instanceof Error ? error.message : String(error));
+      }
+    }
+    await refresh();
+    if (items.length > 1) onLog(`[${stamp()}] delete: ${ok}/${items.length} done`);
+  }, [onLog, refresh, requireSelections]);
 
   const doCopyClip = useCallback(
     (mode: 'copy' | 'cut') => {
-      const sel = requireSelection();
-      if (!sel) return;
-      onClipboard({ mode, path: sel.path, kind: sel.kind, name: sel.name });
-      onChange({ ...pane, status: mode === 'copy' ? `Copied ${sel.name}` : `Cut ${sel.name}`, listening: null });
-      onLog(`[${stamp()}] ${mode} ${sel.name}`);
+      const items = requireSelections();
+      if (!items) return;
+      onClipboard({ mode, items });
+      const label =
+        items.length === 1
+          ? items[0]!.name
+          : `${items.length} items`;
+      onChange({
+        ...pane,
+        status: mode === 'copy' ? `Copied ${label}` : `Cut ${label}`,
+        listening: null
+      });
+      onLog(`[${stamp()}] ${mode} ${label}`);
     },
-    [onChange, onClipboard, onLog, pane, requireSelection]
+    [onChange, onClipboard, onLog, pane, requireSelections]
   );
 
   const doPaste = useCallback(async () => {
-    if (!clipboard) {
+    if (!clipboard?.items.length) {
       onLog('Clipboard is empty.');
       return;
     }
-    try {
-      const dest =
-        clipboard.mode === 'copy'
-          ? await api().copyLocalEntry(clipboard.path, pane.path)
-          : await api().moveLocalEntry(clipboard.path, pane.path);
-      if (clipboard.mode === 'cut') onClipboard(null);
-      await refresh();
-      onRefreshPeer?.();
-      onLog(`[${stamp()}] paste → ${baseName(dest)}`);
-    } catch (error) {
-      onLog(error instanceof Error ? error.message : String(error));
+    let ok = 0;
+    for (const item of clipboard.items) {
+      try {
+        const dest =
+          clipboard.mode === 'copy'
+            ? await api().copyLocalEntry(item.path, pane.path)
+            : await api().moveLocalEntry(item.path, pane.path);
+        ok += 1;
+        onLog(`[${stamp()}] paste → ${baseName(dest)}`);
+      } catch (error) {
+        onLog(error instanceof Error ? error.message : String(error));
+      }
+    }
+    if (clipboard.mode === 'cut') onClipboard(null);
+    await refresh();
+    onRefreshPeer?.();
+    if (clipboard.items.length > 1) {
+      onLog(`[${stamp()}] paste: ${ok}/${clipboard.items.length} done`);
     }
   }, [clipboard, onClipboard, onLog, onRefreshPeer, pane.path, refresh]);
 
@@ -573,7 +755,7 @@ function FilePane(props: {
 
       onChange({
         ...pane,
-        selected: baseName(bestPath),
+        ...exclusiveSelect(baseName(bestPath)),
         matchNames,
         status: `Navigate: ${label}`,
         listening: null
@@ -591,7 +773,8 @@ function FilePane(props: {
     async (transcript: string) => {
       const parsed = parseActionCommand(transcript);
       if (!parsed) return;
-      const selectedPath = pane.selected ? joinLocal(pane.path, pane.selected) : pane.path;
+      const focusName = primarySelected(pane.selected);
+      const selectedPath = focusName ? joinLocal(pane.path, focusName) : pane.path;
       try {
         switch (parsed.id) {
           case 'copy-path':
@@ -888,9 +1071,11 @@ function FilePane(props: {
           onLog
         ),
       reveal: () => {
-        const target = pane.selected ? joinLocal(pane.path, pane.selected) : pane.path;
+        const focusName = primarySelected(pane.selected);
+        const target = focusName ? joinLocal(pane.path, focusName) : pane.path;
         void api().showItemInFolder(target);
       },
+      selectAllVisible: () => setSelection(selectAll(visibleNames)),
       parent: () => void navigateTo(parentLocal(pane.path)),
       back: () => void goBack(),
       forward: () => void goForward(),
@@ -952,9 +1137,11 @@ function FilePane(props: {
     pane.selected,
     refresh,
     requireSelection,
+    setSelection,
     terminalPrefs.launcher,
     toggleJewel,
-    transferToOther
+    transferToOther,
+    visibleNames
   ]);
 
   return (
@@ -967,12 +1154,15 @@ function FilePane(props: {
               {active ? 'Active' : 'Idle'}
             </span>
             <nav className="breadcrumbs" aria-label={active ? 'Active pane path' : 'Other pane path'}>
-              {crumbs.map((crumb, index) => (
+              {driveRoot ? (
+                <DrivePicker currentRoot={driveRoot} onSelect={(root) => void navigateTo(root)} />
+              ) : null}
+              {pathCrumbs.map((crumb, index) => (
                 <span key={crumb.path}>
-                  {index > 0 ? <span className="crumb-sep">/</span> : null}
+                  {driveRoot || index > 0 ? <span className="crumb-sep">/</span> : null}
                   <button
                     type="button"
-                    className={`crumb${index === crumbs.length - 1 ? ' current' : ''}`}
+                    className={`crumb${index === pathCrumbs.length - 1 ? ' current' : ''}`}
                     onClick={() => void navigateTo(crumb.path)}
                   >
                     {crumb.label}
@@ -982,6 +1172,15 @@ function FilePane(props: {
             </nav>
           </div>
           <div className="pane-pills">
+            <button
+              type="button"
+              className="pill"
+              title="Refresh this pane"
+              aria-label="Refresh this pane"
+              onClick={() => void refresh()}
+            >
+              <Icon name="refresh" />
+            </button>
             <button
               type="button"
               className="pill"
@@ -1110,7 +1309,7 @@ function FilePane(props: {
         onContextMenu={(event) => {
           // Empty space (or the ".." row): folder-level actions, nothing selected.
           event.preventDefault();
-          if (pane.selected) onChange({ ...pane, selected: null });
+          if (pane.selected.length) setSelection(emptySelection());
           showMenu('background');
         }}
         onWheel={(event) => {
@@ -1148,15 +1347,21 @@ function FilePane(props: {
           )}
         </button>
         {visible.map((entry) => {
-          const selected = pane.selected === entry.name;
+          const selected = selectedSet.has(entry.name);
           const match = pane.matchNames.has(entry.name);
           const kindIcon = entry.kind === 'directory' ? 'folder' : entry.kind === 'symlink' ? 'link' : 'file';
           const fullPath = joinLocal(pane.path, entry.name);
           const onEntryContextMenu = (event: ReactMouseEvent) => {
             event.preventDefault();
             event.stopPropagation();
-            if (!selected) onChange({ ...pane, selected: entry.name });
+            if (!selected) setSelection(exclusiveSelect(entry.name));
             showMenu(entry.kind);
+          };
+          const onEntryClick = (event: ReactMouseEvent) => {
+            selectEntry(entry.name, {
+              ctrl: event.ctrlKey || event.metaKey,
+              shift: event.shiftKey
+            });
           };
           const openEntry = () => {
             if (entry.kind === 'directory' || entry.kind === 'symlink') {
@@ -1171,7 +1376,7 @@ function FilePane(props: {
                 key={entry.name}
                 type="button"
                 className={`entry${selected ? ' selected' : ''}${match ? ' match' : ''}`}
-                onClick={() => onChange({ ...pane, selected: entry.name })}
+                onClick={onEntryClick}
                 onDoubleClick={openEntry}
                 onContextMenu={onEntryContextMenu}
               >
@@ -1192,7 +1397,7 @@ function FilePane(props: {
               type="button"
               className={`tile${selected ? ' selected' : ''}${match ? ' match' : ''}`}
               title={`${entry.name}\n${formatSize(entry)}`}
-              onClick={() => onChange({ ...pane, selected: entry.name })}
+              onClick={onEntryClick}
               onDoubleClick={openEntry}
               onContextMenu={onEntryContextMenu}
             >
@@ -1217,12 +1422,17 @@ function FilePane(props: {
       </div>
       <div className="pane-footer">
         <span>
-          {selectedEntry ? (
+          {selectedEntries.length === 0 ? (
+            'No selection'
+          ) : selectedEntries.length === 1 ? (
             <>
-              <em style={{ color: 'var(--accent)', fontStyle: 'normal' }}>1</em> selected · {selectedEntry.name}
+              <em style={{ color: 'var(--accent)', fontStyle: 'normal' }}>1</em> selected ·{' '}
+              {selectedEntries[0]!.name}
             </>
           ) : (
-            'No selection'
+            <>
+              <em style={{ color: 'var(--accent)', fontStyle: 'normal' }}>{selectedEntries.length}</em> selected
+            </>
           )}
         </span>
         <span>
@@ -1341,7 +1551,7 @@ function App() {
             ...prev,
             ...next,
             ...hist,
-            selected: null,
+            ...emptySelection(),
             matchNames: new Set(),
             status: next.path,
             listening: null
@@ -1414,7 +1624,7 @@ function App() {
         setLeft({
           ...l,
           ...leftHist,
-          selected: null,
+          ...emptySelection(),
           matchNames: new Set(),
           status: l.path,
           listening: null,
@@ -1427,7 +1637,7 @@ function App() {
         setRight({
           ...r,
           ...rightHist,
-          selected: null,
+          ...emptySelection(),
           matchNames: new Set(),
           status: r.path,
           listening: null,
@@ -1462,6 +1672,11 @@ function App() {
         (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
       if (typing) return;
       const c = cmds();
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        c?.selectAllVisible();
+        return;
+      }
       if (event.key === 'Tab') {
         event.preventDefault();
         setActive((side) => (side === 'left' ? 'right' : 'left'));
@@ -1651,7 +1866,13 @@ function App() {
           <span className="dot" /> Dual Commander
         </span>
         <div className="status">
-          {clipboard ? `clip: ${clipboard.mode} ${clipboard.name}` : 'Local Electron · voice jewels ready'}
+          {clipboard?.items.length
+            ? `clip: ${clipboard.mode} ${
+                clipboard.items.length === 1
+                  ? clipboard.items[0]!.name
+                  : `${clipboard.items.length} items`
+              }`
+            : 'Local Electron · voice jewels ready'}
         </div>
         <div className="global-jump">
           <Icon name="spark" />
@@ -1776,7 +1997,8 @@ function App() {
               title="Open selection in Cursor"
               onClick={() => {
                 const pane = active === 'left' ? left : right;
-                const target = pane.selected ? joinLocal(pane.path, pane.selected) : pane.path;
+                const focusName = primarySelected(pane.selected);
+                const target = focusName ? joinLocal(pane.path, focusName) : pane.path;
                 void api().openWith(target, 'cursor');
               }}
             />

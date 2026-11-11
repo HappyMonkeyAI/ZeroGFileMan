@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('fileman', {
   copyLocalEntry: (from, toDir) => ipcRenderer.invoke('fs:copy', from, toDir),
   moveLocalEntry: (from, toDir) => ipcRenderer.invoke('fs:move', from, toDir),
   homeDirectory: () => ipcRenderer.invoke('fs:home'),
+  listLocalDrives: () => ipcRenderer.invoke('fs:drives'),
   listFavorites: () => ipcRenderer.invoke('favorites:list'),
   addFavorite: (path, label) => ipcRenderer.invoke('favorites:add', path, label),
   removeFavorite: (path) => ipcRenderer.invoke('favorites:remove', path),

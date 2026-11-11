@@ -21,6 +21,7 @@ import {
   copyLocalEntry,
   createLocalDirectory,
   listLocalDirectory,
+  listLocalDrives,
   localHome,
   moveLocalEntry,
   removeLocalEntry,
@@ -118,6 +119,7 @@ function asKind(value: unknown): FileEntry['kind'] {
 }
 
 handle('fs:home', () => localHome());
+handle('fs:drives', () => listLocalDrives());
 handle('favorites:list', () => listFavorites());
 handle('favorites:add', (_e, path: unknown, label?: unknown) => addFavorite(path, label));
 handle('favorites:remove', (_e, path: unknown) => removeFavorite(path));
