@@ -36,6 +36,7 @@ import {
   stepForward,
   type HistoryState
 } from '../shared/pane-history.js';
+import { filterForNavigation } from '../shared/pane-filter.js';
 import { isFavoritePath, type Favorite } from '../shared/favorites.js';
 import {
   iconPixelSize,
@@ -441,6 +442,7 @@ function FilePane(props: {
   const [pathDraft, setPathDraft] = useState<string | null>(null);
   const [pathError, setPathError] = useState<string | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
+  const filterInputRef = useRef<HTMLInputElement | null>(null);
   const editingPath = pathDraft !== null;
   const visible = useMemo(() => {
     const q = pane.filter.trim().toLowerCase();
@@ -502,7 +504,8 @@ function FilePane(props: {
           ...emptySelection(),
           matchNames: new Set(),
           status: next.path,
-          listening: null
+          listening: null,
+          filter: filterForNavigation(pane.path, next.path, pane.filter)
         });
         onLog(`[${stamp()}] Focus → ${next.path}`);
         return null;
@@ -1415,11 +1418,26 @@ function FilePane(props: {
           <div className="filter">
             <Icon name="sessions" />
             <input
+              ref={filterInputRef}
               value={pane.filter}
               onChange={(e) => onChange({ ...pane, filter: e.target.value })}
               placeholder="Filter current view…"
               aria-label="Filter"
             />
+            {pane.filter ? (
+              <button
+                type="button"
+                className="filter-clear"
+                title="Clear filter"
+                aria-label="Clear filter"
+                onClick={() => {
+                  onChange({ ...pane, filter: '' });
+                  filterInputRef.current?.focus();
+                }}
+              >
+                <Icon name="x" />
+              </button>
+            ) : null}
           </div>
           <div className="view-toggle" role="group" aria-label="Listing view">
             {(

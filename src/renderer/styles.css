@@ -914,7 +914,7 @@ select {
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 4px 8px 4px 26px;
+  padding: 4px 26px 4px 26px;
   font-family: var(--mono);
   font-size: 11px;
   outline: none;
@@ -922,6 +922,33 @@ select {
 
 .filter input:focus {
   border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+}
+
+.filter-clear {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.filter-clear:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+}
+
+.filter-clear .icon-svg {
+  width: 12px;
+  height: 12px;
 }
 
 .jewels {
