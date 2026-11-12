@@ -900,7 +900,7 @@ select {
   min-width: 0;
 }
 
-.filter .icon-svg {
+.filter > .icon-svg {
   position: absolute;
   left: 7px;
   top: 50%;
@@ -934,7 +934,7 @@ select {
   justify-content: center;
   width: 18px;
   height: 18px;
-  padding: 0 4px 0 0;
+  padding: 0 2px 0 0;
   border: none;
   border-radius: 4px;
   background: transparent;
