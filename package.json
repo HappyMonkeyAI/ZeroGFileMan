@@ -20,7 +20,7 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-preload.mjs && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "start": "node scripts/start-electron.mjs",
+    "start": "npm run build && node scripts/start-electron.mjs",
     "start:electron-cli": "electron .",
     "package:win": "npm run build && electron-builder --win nsis portable --x64 --publish never",
     "icon:render": "node scripts/render-icon.mjs",

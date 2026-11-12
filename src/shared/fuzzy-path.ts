@@ -74,6 +74,7 @@ const ACTION_PATTERNS: { id: string; patterns: RegExp[] }[] = [
   { id: 'open-terminal', patterns: [/\b(open\s+)?terminal(\s+here)?\b/i, /\bshell\s+here\b/i] },
   { id: 'reveal', patterns: [/\breveal\b/i, /\bshow\s+in\s+explorer\b/i] },
   { id: 'new-folder', patterns: [/\b(new|create)\s+(folder|directory)\b/i, /\bmkdir\b/i] },
+  { id: 'new-file', patterns: [/\b(new|create)\s+file\b/i, /\bnew\s+text\b/i, /\bcreate\s+text\b/i] },
   { id: 'refresh', patterns: [/\brefresh\b/i, /\breload\b/i] },
   { id: 'open-default', patterns: [/\bopen\s+(this|it|file)\b/i, /\bopen\b/i] }
 ];

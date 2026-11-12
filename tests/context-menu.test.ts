@@ -64,6 +64,7 @@ describe('buildContextMenu', () => {
     const items = buildContextMenu({ kind: 'background', canPaste: true, canTransfer: false }, 'win32');
     expect(commands(items)).toEqual([
       'file:new-folder',
+      'file:new-file',
       'edit:paste',
       'file:open-terminal',
       'file:copy-path',

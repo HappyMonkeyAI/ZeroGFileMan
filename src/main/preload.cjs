@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('fileman', {
   searchLocalShallow: (path, maxDepth) => ipcRenderer.invoke('fs:search', path, maxDepth),
   readThumbnail: (path, maxEdge) => ipcRenderer.invoke('fs:thumbnail', path, maxEdge),
   createLocalDirectory: (path) => ipcRenderer.invoke('fs:mkdir', path),
+  createLocalFile: (path, content) => ipcRenderer.invoke('fs:create-file', path, content),
   renameLocalEntry: (from, to) => ipcRenderer.invoke('fs:rename', from, to),
   removeLocalEntry: (path, kind) => ipcRenderer.invoke('fs:remove', path, kind),
   copyLocalEntry: (from, toDir) => ipcRenderer.invoke('fs:copy', from, toDir),

@@ -20,6 +20,7 @@ import { addFavorite, listFavorites, removeFavorite } from './favorites-store.js
 import {
   copyLocalEntry,
   createLocalDirectory,
+  createLocalFile,
   listLocalDirectory,
   listLocalDrives,
   localHome,
@@ -133,6 +134,9 @@ handle('fs:thumbnail', (_e, path: unknown, maxEdge?: unknown) =>
   readThumbnail(path, typeof maxEdge === 'number' ? maxEdge : 256)
 );
 handle('fs:mkdir', (_e, path: unknown) => createLocalDirectory(String(path)));
+handle('fs:create-file', (_e, path: unknown, content?: unknown) =>
+  createLocalFile(String(path), typeof content === 'string' ? content : '')
+);
 handle('fs:rename', (_e, from: unknown, to: unknown) =>
   renameLocalEntry(String(from), String(to))
 );

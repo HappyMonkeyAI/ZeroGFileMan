@@ -245,6 +245,14 @@ export function Icon({ name, className = '' }: { name: string; className?: strin
           <path d="M11 11v5M8.5 13.5h5" />
         </svg>
       );
+    case 'file-plus':
+      return (
+        <svg {...common}>
+          <path d="M6 3.5h7L18 8v12.5H6z" />
+          <path d="M13 3.5V8h5" />
+          <path d="M12 12v5M9.5 14.5h5" />
+        </svg>
+      );
     case 'trash':
       return (
         <svg {...common}>
@@ -261,6 +269,13 @@ export function Icon({ name, className = '' }: { name: string; className?: strin
       return (
         <svg {...common}>
           <path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5M20 4v4.5h-4.5" />
+        </svg>
+      );
+    case 'corner-down-left':
+      return (
+        <svg {...common}>
+          <path d="M20 5v6a4 4 0 0 1-4 4H5" />
+          <path d="M9 11l-4 4 4 4" />
         </svg>
       );
     case 'arrow-up':

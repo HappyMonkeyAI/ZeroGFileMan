@@ -56,6 +56,7 @@ export function buildContextMenu(target: ContextMenuTarget, platform: NodeJS.Pla
   if (target.kind === 'background') {
     return [
       item('New Folder…', 'file:new-folder', { accelerator: 'CmdOrCtrl+Shift+N' }),
+      item('New File…', 'file:new-file', { accelerator: 'CmdOrCtrl+N' }),
       item('Paste', 'edit:paste', { enabled: target.canPaste, accelerator: 'CmdOrCtrl+V' }),
       SEPARATOR,
       item('Open Terminal Here', 'file:open-terminal'),

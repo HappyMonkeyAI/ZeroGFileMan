@@ -76,6 +76,7 @@ export interface FileManApi {
   searchLocalShallow(path: string, maxDepth?: number): Promise<SearchHit[]>;
   readThumbnail(path: string, maxEdge?: number): Promise<ThumbnailResult | null>;
   createLocalDirectory(path: string): Promise<void>;
+  createLocalFile(path: string, content?: string): Promise<void>;
   renameLocalEntry(from: string, to: string): Promise<void>;
   removeLocalEntry(path: string, kind: FileEntry['kind']): Promise<void>;
   copyLocalEntry(from: string, toDir: string): Promise<string>;

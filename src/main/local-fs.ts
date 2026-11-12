@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { access, cp, lstat, mkdir, readdir, rename, rm, rmdir } from 'node:fs/promises';
+import { access, cp, lstat, mkdir, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import type { DirectoryListing, FileEntry, SearchHit } from '../shared/types.js';
@@ -149,6 +149,31 @@ export async function createLocalDirectory(path: string): Promise<void> {
   const target = resolveLocalPath(path);
   assertEntryName(basename(target), process.platform);
   await mkdir(target);
+}
+
+/** File templates for the "New File" dialog. */
+export const FILE_TEMPLATES: Record<string, { ext: string; content: string }> = {
+  'Text Document': { ext: '.txt', content: '' },
+  'Markdown': { ext: '.md', content: '# New Document\n\n' },
+  'JSON': { ext: '.json', content: '{\n  \n}\n' },
+  'JavaScript': { ext: '.js', content: '// New JavaScript file\n' },
+  'TypeScript': { ext: '.ts', content: '// New TypeScript file\n' },
+  'HTML': { ext: '.html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>New Document</title>\n</head>\n<body>\n  \n</body>\n</html>\n' },
+  'CSS': { ext: '.css', content: '/* New stylesheet */\n' },
+  'Python': { ext: '.py', content: '#!/usr/bin/env python3\n# New Python file\n' },
+  'Shell Script': { ext: '.sh', content: '#!/bin/bash\n# New shell script\n' },
+  'XML': { ext: '.xml', content: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n  \n</root>\n' }
+};
+
+export async function createLocalFile(path: string, content: string = ''): Promise<void> {
+  const target = resolveLocalPath(path);
+  assertEntryName(basename(target), process.platform);
+  // Check if file already exists
+  const exists = await access(target, constants.F_OK)
+    .then(() => true)
+    .catch(() => false);
+  if (exists) throw new Error('A file with that name already exists here.');
+  await writeFile(target, content, 'utf8');
 }
 
 /** Rename within the same folder. Moving elsewhere goes through moveLocalEntry. */

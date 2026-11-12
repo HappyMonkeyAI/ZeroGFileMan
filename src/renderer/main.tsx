@@ -215,7 +215,9 @@ type FileClip = {
 
 type PaneCommands = {
   refresh: () => void;
+  editPath: () => void;
   newFolder: () => void;
+  newFile: () => void;
   rename: () => void;
   delete: () => void;
   copy: () => void;
@@ -365,11 +367,11 @@ function ToolButton(props: {
       disabled={disabled}
       onClick={onClick}
     >
-      <span className={toneClass}>
+      <span className={`tool-icon ${toneClass}`.trim()}>
         <Icon name={icon} />
       </span>
-      {label ? <span>{label}</span> : null}
-      {hint ? <span className="hint">{hint}</span> : null}
+      {label ? <span className="tool-label">{label}</span> : null}
+      {hint ? <span className="tool-hint hint">{hint}</span> : null}
     </button>
   );
 }
@@ -436,6 +438,10 @@ function FilePane(props: {
   const crumbs = useMemo(() => breadcrumbSegments(pane.path), [pane.path]);
   const driveRoot = useMemo(() => windowsDriveRoot(pane.path), [pane.path]);
   const pathCrumbs = driveRoot ? crumbs.slice(1) : crumbs;
+  const [pathDraft, setPathDraft] = useState<string | null>(null);
+  const [pathError, setPathError] = useState<string | null>(null);
+  const pathInputRef = useRef<HTMLInputElement | null>(null);
+  const editingPath = pathDraft !== null;
   const visible = useMemo(() => {
     const q = pane.filter.trim().toLowerCase();
     const filtered = pane.entries.filter((e) => {
@@ -479,8 +485,12 @@ function FilePane(props: {
     [onLog]
   );
 
+  /** Resolves to null once the pane moved, or to the failure message. */
   const navigateTo = useCallback(
-    async (path: string, options: { record?: boolean; history?: HistoryState } = {}) => {
+    async (
+      path: string,
+      options: { record?: boolean; history?: HistoryState } = {}
+    ): Promise<string | null> => {
       const record = options.record !== false;
       try {
         const next = await loadPane(path);
@@ -495,12 +505,62 @@ function FilePane(props: {
           listening: null
         });
         onLog(`[${stamp()}] Focus → ${next.path}`);
+        return null;
       } catch (error) {
-        onLog(error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        onLog(message);
+        return message;
       }
     },
     [onChange, onLog, pane]
   );
+
+  const openPathEdit = useCallback(() => {
+    setPathError(null);
+    setPathDraft((current) => current ?? pane.path);
+    const input = pathInputRef.current;
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }, [pane.path]);
+
+  const closePathEdit = useCallback(() => {
+    setPathDraft(null);
+    setPathError(null);
+  }, []);
+
+  const commitPathEdit = useCallback(async () => {
+    const next = (pathDraft ?? '').trim();
+    if (!next) {
+      setPathError('Type a folder path first.');
+      return;
+    }
+    const failure = await navigateTo(next);
+    if (failure) {
+      setPathError(failure.includes('ENOENT') ? 'No folder at that path.' : describeError(failure));
+      pathInputRef.current?.focus();
+      return;
+    }
+    closePathEdit();
+  }, [closePathEdit, navigateTo, pathDraft]);
+
+  const copyPathDraft = useCallback(() => {
+    const text = pathDraft ?? '';
+    if (!text) return;
+    void api()
+      .copyText(text)
+      .then(() => onLog(`[${stamp()}] copy path ${text}`))
+      .catch((error: unknown) => onLog(`Copy failed: ${describeError(error)}`));
+  }, [onLog, pathDraft]);
+
+  const attachPathInput = useCallback((node: HTMLInputElement | null) => {
+    pathInputRef.current = node;
+    if (node) {
+      node.focus();
+      node.select();
+    }
+  }, []);
 
   const setSelection = useCallback(
     (next: { selected: string[]; selectionAnchor: string | null }) => {
@@ -629,6 +689,56 @@ function FilePane(props: {
       onLog
     );
   }, [navigateTo, onLog, pane.path]);
+
+  const FILE_TEMPLATES = useMemo(() => [
+    { label: 'Text Document', ext: '.txt', content: '' },
+    { label: 'Markdown', ext: '.md', content: '# New Document\n\n' },
+    { label: 'JSON', ext: '.json', content: '{\n  \n}\n' },
+    { label: 'JavaScript', ext: '.js', content: '// New JavaScript file\n' },
+    { label: 'TypeScript', ext: '.ts', content: '// New TypeScript file\n' },
+    { label: 'HTML', ext: '.html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>New Document</title>\n</head>\n<body>\n  \n</body>\n</html>\n' },
+    { label: 'CSS', ext: '.css', content: '/* New stylesheet */\n' },
+    { label: 'Python', ext: '.py', content: '#!/usr/bin/env python3\n# New Python file\n' },
+    { label: 'Shell Script', ext: '.sh', content: '#!/bin/bash\n# New shell script\n' },
+    { label: 'XML', ext: '.xml', content: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n  \n</root>\n' }
+  ], []);
+
+  const doNewFile = useCallback(async () => {
+    const templateOptions = FILE_TEMPLATES.map(t => t.label).join('\n');
+    const selectedType = window.prompt(
+      `Choose file type:\n\n${templateOptions}\n\nEnter number (1-${FILE_TEMPLATES.length}):`,
+      '1'
+    );
+    if (!selectedType?.trim()) return;
+
+    const typeIndex = parseInt(selectedType.trim(), 10) - 1;
+    if (isNaN(typeIndex) || typeIndex < 0 || typeIndex >= FILE_TEMPLATES.length) {
+      onLog('New file: invalid file type selection');
+      return;
+    }
+
+    const template = FILE_TEMPLATES[typeIndex]!;
+    const defaultName = `New File${template.ext}`;
+    const name = window.prompt(`New ${template.label} name`, defaultName);
+    if (!name?.trim()) return;
+
+    const fileName = name.trim().endsWith(template.ext) ? name.trim() : name.trim() + template.ext;
+    const nameProblem = entryNameProblem(fileName, isWindowsPath(pane.path) ? 'win32' : 'posix');
+    if (nameProblem) {
+      onLog(`New file: ${nameProblem}`);
+      return;
+    }
+
+    await runReported(
+      `New file "${fileName}"`,
+      async () => {
+        await api().createLocalFile(joinLocal(pane.path, fileName), template.content);
+        await navigateTo(pane.path);
+        onLog(`[${stamp()}] create ${fileName}`);
+      },
+      onLog
+    );
+  }, [FILE_TEMPLATES, navigateTo, onLog, pane.path]);
 
   const doRename = useCallback(async () => {
     const sel = requireSelection();
@@ -1044,7 +1154,9 @@ function FilePane(props: {
     }
     onRegisterCommands({
       refresh: () => void refresh(),
+      editPath: openPathEdit,
       newFolder: () => void doNewFolder(),
+      newFile: () => void doNewFile(),
       rename: () => void doRename(),
       delete: () => void doDelete(),
       copy: () => doCopyClip('copy'),
@@ -1132,6 +1244,7 @@ function FilePane(props: {
     navigateTo,
     onLog,
     onRegisterCommands,
+    openPathEdit,
     openTerminalHere,
     pane.path,
     pane.selected,
@@ -1148,30 +1261,100 @@ function FilePane(props: {
     <section className={`pane${active ? ' active' : ''}`} onMouseDown={onActivate}>
       <div className="pane-head">
         <div className="pane-head-row">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <div
+            className={`pane-head-path${editingPath ? ' editing' : ''}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}
+          >
             <span className={`badge${active ? ' active' : ' idle'}`} title={active ? 'Active pane' : 'Other pane'}>
               {active ? <span className="pulse" /> : <span className="pulse" style={{ background: '#64748b', animation: 'none' }} />}
               {active ? 'Active' : 'Idle'}
             </span>
-            <nav className="breadcrumbs" aria-label={active ? 'Active pane path' : 'Other pane path'}>
-              {driveRoot ? (
-                <DrivePicker currentRoot={driveRoot} onSelect={(root) => void navigateTo(root)} />
-              ) : null}
-              {pathCrumbs.map((crumb, index) => (
-                <span key={crumb.path}>
-                  {driveRoot || index > 0 ? <span className="crumb-sep">/</span> : null}
-                  <button
-                    type="button"
-                    className={`crumb${index === pathCrumbs.length - 1 ? ' current' : ''}`}
-                    onClick={() => void navigateTo(crumb.path)}
-                  >
-                    {crumb.label}
-                  </button>
-                </span>
-              ))}
-            </nav>
+            {editingPath ? (
+              <div className={`path-edit${pathError ? ' invalid' : ''}`}>
+                <Icon name="corner-down-left" />
+                <input
+                  ref={attachPathInput}
+                  value={pathDraft ?? ''}
+                  onChange={(event) => {
+                    setPathDraft(event.target.value);
+                    if (pathError) setPathError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      if (!event.nativeEvent.isComposing) void commitPathEdit();
+                      return;
+                    }
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      closePathEdit();
+                    }
+                  }}
+                  onBlur={closePathEdit}
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  placeholder="Type or paste a folder path…"
+                  aria-label="Pane path"
+                  aria-invalid={pathError ? true : undefined}
+                />
+                {pathError ? (
+                  <span className="path-edit-error" role="alert" title={pathError}>
+                    {pathError}
+                  </span>
+                ) : (
+                  <span className="kbd">Enter</span>
+                )}
+                <button
+                  type="button"
+                  className="path-edit-copy"
+                  title="Copy this path"
+                  aria-label="Copy this path"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={copyPathDraft}
+                >
+                  <Icon name="copy" />
+                </button>
+              </div>
+            ) : (
+              <nav className="breadcrumbs" aria-label={active ? 'Active pane path' : 'Other pane path'}>
+                {driveRoot ? (
+                  <DrivePicker currentRoot={driveRoot} onSelect={(root) => void navigateTo(root)} />
+                ) : null}
+                {pathCrumbs.map((crumb, index) => (
+                  <span key={crumb.path}>
+                    {driveRoot || index > 0 ? <span className="crumb-sep">/</span> : null}
+                    <button
+                      type="button"
+                      className={`crumb${index === pathCrumbs.length - 1 ? ' current' : ''}`}
+                      onClick={() => void navigateTo(crumb.path)}
+                    >
+                      {crumb.label}
+                    </button>
+                  </span>
+                ))}
+              </nav>
+            )}
           </div>
           <div className="pane-pills">
+            <button
+              type="button"
+              className={`pill path-pill${editingPath ? ' lit' : ''}`}
+              title={
+                editingPath
+                  ? 'Go to this path (Enter) — Esc or a click outside cancels'
+                  : 'Edit path (Ctrl+L) — type or paste a folder, Enter to go, Esc to cancel'
+              }
+              aria-label={editingPath ? 'Go to typed path' : 'Edit pane path'}
+              aria-pressed={editingPath}
+              onMouseDown={(event) => {
+                if (editingPath) event.preventDefault();
+              }}
+              onClick={() => (editingPath ? void commitPathEdit() : openPathEdit())}
+            >
+              <Icon name="corner-down-left" />
+            </button>
             <button
               type="button"
               className="pill"
@@ -1666,6 +1849,11 @@ function App() {
         void addCurrentFavorite();
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'l') {
+        event.preventDefault();
+        cmds()?.editPath();
+        return;
+      }
       const target = event.target as HTMLElement | null;
       const typing =
         target &&
@@ -1717,6 +1905,11 @@ function App() {
         c?.newFolder();
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && event.key === 'n' && !event.shiftKey) {
+        event.preventDefault();
+        c?.newFile();
+        return;
+      }
       if (event.key === 'Delete') {
         event.preventDefault();
         c?.delete();
@@ -1732,6 +1925,9 @@ function App() {
       switch (command) {
         case 'file:new-folder':
           c?.newFolder();
+          break;
+        case 'file:new-file':
+          c?.newFile();
           break;
         case 'file:rename':
           c?.rename();
@@ -1794,6 +1990,9 @@ function App() {
           break;
         case 'go:jump':
           focusJump();
+          break;
+        case 'go:edit-path':
+          c?.editPath();
           break;
         case 'go:add-favorite':
           void addCurrentFavorite();
@@ -1955,6 +2154,16 @@ function App() {
         >
           <Icon name="plus" /> Add
         </button>
+        <div className="bar-toggles">
+          <label className="check">
+            <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
+            Show Hidden
+          </label>
+          <label className="check hot">
+            <input type="checkbox" checked={autoNavigate} onChange={(e) => setAutoNavigate(e.target.checked)} />
+            Auto-nav
+          </label>
+        </div>
       </section>
 
       <section className="master-toolbar">
@@ -1978,6 +2187,7 @@ function App() {
           </div>
           <div className="tool-group">
             <ToolButton icon="folder-plus" label="New Folder" hint="F7" title="New folder" tone="accent" onClick={() => cmds()?.newFolder()} />
+            <ToolButton icon="file-plus" label="New File" hint="Ctrl+N" title="New file" tone="accent" onClick={() => cmds()?.newFile()} />
             <ToolButton icon="pencil" label="Rename" hint="F2" title="Rename" tone="warn" onClick={() => cmds()?.rename()} />
             <ToolButton icon="trash" label="Delete" title="Delete" danger onClick={() => cmds()?.delete()} />
           </div>
@@ -2061,16 +2271,6 @@ function App() {
               onClick={() => updateWorkspaceLayout(toggleMaximize(workspaceLayout, active))}
             />
           </div>
-        </div>
-        <div className="toolbar-end">
-          <label className="check">
-            <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
-            Show Hidden
-          </label>
-          <label className="check hot">
-            <input type="checkbox" checked={autoNavigate} onChange={(e) => setAutoNavigate(e.target.checked)} />
-            Auto-nav
-          </label>
         </div>
       </section>
 

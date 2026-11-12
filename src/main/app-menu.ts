@@ -2,6 +2,7 @@ import { Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'elect
 
 export type MenuCommand =
   | 'file:new-folder'
+  | 'file:new-file'
   | 'file:rename'
   | 'file:delete'
   | 'file:copy-path'
@@ -25,6 +26,7 @@ export type MenuCommand =
   | 'window:focus-left'
   | 'window:focus-right'
   | 'go:jump'
+  | 'go:edit-path'
   | 'go:add-favorite'
   | 'voice:navigate'
   | 'voice:action'
@@ -43,6 +45,11 @@ export function installApplicationMenu(getWindow: () => BrowserWindow | undefine
           label: 'New Folder',
           accelerator: 'CmdOrCtrl+Shift+N',
           click: () => send(getWindow(), 'file:new-folder')
+        },
+        {
+          label: 'New File',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => send(getWindow(), 'file:new-file')
         },
         {
           label: 'Rename',
@@ -169,6 +176,11 @@ export function installApplicationMenu(getWindow: () => BrowserWindow | undefine
           label: 'Global Jump',
           accelerator: 'CmdOrCtrl+K',
           click: () => send(getWindow(), 'go:jump')
+        },
+        {
+          label: 'Edit Path',
+          accelerator: 'CmdOrCtrl+L',
+          click: () => send(getWindow(), 'go:edit-path')
         },
         {
           label: 'Add Current Path to Favorites',
