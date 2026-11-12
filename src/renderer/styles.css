@@ -926,13 +926,13 @@ select {
 
 .filter-clear {
   position: absolute;
-  right: 3px;
+  right: 2px;
   top: 50%;
   transform: translateY(-50%);
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: none;
   border-radius: 4px;
