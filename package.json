@@ -99,7 +99,7 @@
           ]
         }
       ],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true
     },
     "nsis": {
       "artifactName": "ZeroGFileMan-${version}-Setup.${ext}",
