@@ -1,7 +1,6 @@
 {
   "name": "zerogfileman",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
   "description": "Local-first multi-pane voice-enabled file manager",
   "license": "MIT",
   "author": "Stephen Phillips",
@@ -15,6 +14,26 @@
   "homepage": "https://github.com/HappyMonkeyAI/ZeroGFileMan#readme",
   "type": "module",
   "main": "dist/main/main.js",
+  "bin": {
+    "zerogfileman": "bin/zerogfileman.cjs"
+  },
+  "files": [
+    "dist/main",
+    "dist/renderer",
+    "build/icon.ico",
+    "build/icon.png",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "electron",
+    "file-manager",
+    "files",
+    "voice"
+  ],
   "scripts": {
     "dev": "concurrently -k \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"vite --host 127.0.0.1\"",
     "build": "tsc -p tsconfig.json && node scripts/copy-preload.mjs && vite build",
@@ -24,7 +43,8 @@
     "start:electron-cli": "electron .",
     "package:win": "npm run build && electron-builder --win nsis portable --x64 --publish never",
     "icon:render": "node scripts/render-icon.mjs",
-    "ci": "npm run typecheck && npm test && npm run build"
+    "ci": "npm run typecheck && npm test && npm run build",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",
