@@ -1,6 +1,6 @@
 {
   "name": "zerogfileman",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local-first multi-pane voice-enabled file manager",
   "license": "MIT",
   "author": "Stephen Phillips",
@@ -20,6 +20,7 @@
   "files": [
     "dist/main",
     "dist/renderer",
+    "dist/shared",
     "build/icon.ico",
     "build/icon.png",
     "LICENSE",
@@ -77,6 +78,7 @@
     "files": [
       "dist/main/**/*",
       "dist/renderer/**/*",
+      "dist/shared/**/*",
       "package.json",
       "LICENSE",
       "THIRD-PARTY-NOTICES.md"
