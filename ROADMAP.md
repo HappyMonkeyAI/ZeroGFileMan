@@ -48,6 +48,8 @@ Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan
 | P1.4 | Copy/Move **to other pane** | Copy → / Move → toolbar + F5/F6 | done |
 | P1.5 | Editable favorites | Persist bookmarks in userData; rename/remove chips and active-path toggle | done |
 | P1.6 | Global jump (⌘K / Ctrl+K) | Focus brand-bar search; Enter → Navigate | done |
+| P1.7 | In-app name dialog | Electron has no `window.prompt`; New Folder / New File / Rename / favorite naming use a validated dialog | done |
+| P1.8 | Drag-drop between panes | Drag = move, Ctrl = copy, Shift = force move; folder rows, pane background, "..", breadcrumbs as targets; multi-select drag | done |
 
 ### P2 — Voice that works offline
 
@@ -80,7 +82,6 @@ Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan
 
 ## Later / park
 
-- Drag-drop between panes (multi-select shipped)  
 - Recursive delete with explicit danger modal (default stays non-recursive)  
 - Permissions / owner columns (platform-accurate, not fake Unix on NTFS)  
 - Thumbnail generation caps (size/type allowlist; no decode of huge RAW by default)  
