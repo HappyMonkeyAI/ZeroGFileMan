@@ -79,6 +79,7 @@ import type {
   TerminalPrefs,
   VoiceMode
 } from '../shared/types.js';
+import { shouldPrompt, type UpdateState } from '../shared/update.js';
 import { shouldStopJewelOnRelease } from '../shared/voice-jewel.js';
 import { Icon } from './icons.js';
 import { loadStoredWorkspaceLayout, storeWorkspaceLayout } from './layout-prefs.js';
@@ -101,6 +102,9 @@ import {
   type ThemeId
 } from './themes.js';
 import { loadStoredTranscriptDrawer, storeTranscriptDrawer } from './transcript-prefs.js';
+import { loadStoredUpdateSettings, storeUpdateSettings, type UpdateSettings } from './update-settings.js';
+import { UpdatePrompt } from './update-prompt.js';
+import { updateSummary } from './update-view.js';
 import { isMostlySilence, VoiceRecorder } from './voice.js';
 // Fonts are bundled rather than fetched from Google Fonts, so a launch makes
 // no network request and the UI looks the same offline.
@@ -1678,6 +1682,11 @@ function App() {
     loadStoredTranscriptDrawer()
   );
   const [log, setLog] = useState<string[]>([`[${stamp()}] ZeroG FileMan ready · dual commander`]);
+  const [update, setUpdate] = useState<UpdateState | null>(null);
+  const [dismissedUpdate, setDismissedUpdate] = useState<string | null>(null);
+  const [updateAsked, setUpdateAsked] = useState(false);
+  const [updateSettings, setUpdateSettings] = useState<UpdateSettings>(() => loadStoredUpdateSettings());
+  const startupCheckDone = useRef(false);
   const leftCommands = useRef<PaneCommands | null>(null);
   const rightCommands = useRef<PaneCommands | null>(null);
   const jumpInputRef = useRef<HTMLInputElement | null>(null);
@@ -1721,6 +1730,24 @@ function App() {
     });
   }, []);
 
+  const updateUpdateSettings = useCallback((patch: Partial<UpdateSettings>) => {
+    setUpdateSettings((prev) => {
+      const next = { ...prev, ...patch };
+      storeUpdateSettings(next);
+      return next;
+    });
+  }, []);
+
+  const checkForUpdatesNow = useCallback(() => {
+    setUpdateAsked(true);
+    void api().checkForUpdates().catch((error) => pushLog(error instanceof Error ? error.message : String(error)));
+  }, [pushLog]);
+
+  const closeUpdatePrompt = useCallback(() => {
+    if (update && 'version' in update) setDismissedUpdate(update.version);
+    setUpdateAsked(false);
+  }, [update]);
+
   useEffect(() => {
     applyTheme(theme);
     storeTheme(theme);
@@ -1732,6 +1759,20 @@ function App() {
       .then(setSpeechKeyStatus)
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    void api().updateState().then(setUpdate).catch(() => undefined);
+    return api().onUpdateState(setUpdate);
+  }, []);
+
+  useEffect(() => {
+    if (startupCheckDone.current || !updateSettings.checkOnStartup) return;
+    const timer = window.setTimeout(() => {
+      startupCheckDone.current = true;
+      void api().checkForUpdates().catch(() => undefined);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [updateSettings.checkOnStartup]);
 
   const cmds = () => (active === 'left' ? leftCommands.current : rightCommands.current);
 
@@ -1785,6 +1826,21 @@ function App() {
         const next = await api().removeFavorite(path);
         setFavorites(next);
         pushLog(`[${stamp()}] favorite − ${path}`);
+      } catch (error) {
+        pushLog(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [pushLog]
+  );
+
+  const renameFavoriteChip = useCallback(
+    async (favorite: Favorite) => {
+      const label = window.prompt('Favorite name', favorite.label);
+      if (label === null || !label.trim() || label.trim() === favorite.label) return;
+      try {
+        const next = await api().renameFavorite(favorite.path, label.trim());
+        setFavorites(next);
+        pushLog(`[${stamp()}] favorite renamed ${favorite.path} → ${label.trim()}`);
       } catch (error) {
         pushLog(error instanceof Error ? error.message : String(error));
       }
@@ -2038,6 +2094,9 @@ function App() {
         case 'voice:action':
           c?.voiceAction();
           break;
+        case 'help:check-updates':
+          checkForUpdatesNow();
+          break;
         case 'help:about':
           pushLog('ZeroG FileMan — local dual-pane voice file manager (HappyMonkeyAI)');
           break;
@@ -2045,7 +2104,7 @@ function App() {
           break;
       }
     });
-  }, [active, addCurrentFavorite, focusJump, pushLog]);
+  }, [active, addCurrentFavorite, checkForUpdatesNow, focusJump, pushLog]);
 
   const runGlobalJump = async () => {
     const q = jumpQuery.trim();
@@ -2059,6 +2118,7 @@ function App() {
 
   const activePath = (active === 'left' ? left : right)?.path ?? '';
   const activeIsFavorite = isFavoritePath(favorites, activePath);
+  const updatePromptOpen = shouldPrompt(update, updateSettings.skippedVersion, dismissedUpdate, updateAsked);
 
   if (!left || !right) {
     return (
@@ -2128,6 +2188,15 @@ function App() {
           <option value="nord">Nord</option>
           <option value="dracula">Dracula</option>
         </select>
+        <button
+          type="button"
+          className="update-button"
+          title={updateSummary(update)}
+          disabled={update?.mode === 'disabled' || update?.status === 'checking' || update?.status === 'downloading'}
+          onClick={checkForUpdatesNow}
+        >
+          Updates
+        </button>
       </header>
 
       <section className="favorites-bar" aria-label="Favorites">
@@ -2136,41 +2205,47 @@ function App() {
         </span>
         <div className="favorites-chips">
           {favorites.map((fav) => (
-            <button
+            <div
               key={fav.path}
-              type="button"
               className={`fav-chip${fav.path.toLowerCase() === activePath.toLowerCase() ? ' current' : ''}`}
               title={fav.path}
-              onClick={() => void goActive(fav.path)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                void removeFavoriteChip(fav.path);
-              }}
             >
-              <span>{fav.label}</span>
-              <span
+              <button
+                type="button"
+                className="fav-open"
+                onClick={() => void goActive(fav.path)}
+              >
+                {fav.label}
+              </button>
+              <button
+                type="button"
+                className="fav-rename"
+                title={`Rename ${fav.label}`}
+                aria-label={`Rename ${fav.label}`}
+                onClick={() => void renameFavoriteChip(fav)}
+              >
+                <Icon name="pencil" />
+              </button>
+              <button
+                type="button"
                 className="fav-remove"
-                role="button"
-                tabIndex={-1}
-                title="Remove favorite"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void removeFavoriteChip(fav.path);
-                }}
+                title={`Remove ${fav.label}`}
+                aria-label={`Remove ${fav.label}`}
+                onClick={() => void removeFavoriteChip(fav.path)}
               >
                 ×
-              </span>
-            </button>
+              </button>
+            </div>
           ))}
         </div>
         <button
           type="button"
-          className="fav-add"
-          title={activeIsFavorite ? 'Current path already favorited (Ctrl+D)' : 'Add current path (Ctrl+D)'}
-          disabled={!activePath || activeIsFavorite}
-          onClick={() => void addCurrentFavorite()}
+          className={`fav-add${activeIsFavorite ? ' active' : ''}`}
+          title={activeIsFavorite ? 'Remove current path from favorites' : 'Add current path (Ctrl+D)'}
+          disabled={!activePath}
+          onClick={() => activeIsFavorite ? void removeFavoriteChip(activePath) : void addCurrentFavorite()}
         >
-          <Icon name="plus" /> Add
+          <Icon name={activeIsFavorite ? 'star' : 'plus'} /> {activeIsFavorite ? 'Remove' : 'Add'}
         </button>
         <div className="bar-toggles">
           <label className="check">
@@ -2605,6 +2680,39 @@ function App() {
                 onChange={(e) => updateTerminalPrefs({ customCommand: e.target.value })}
               />
             </label>
+            <label>
+              Updates
+              <select
+                value={updateSettings.checkOnStartup ? 'startup' : 'manual'}
+                disabled={update?.mode === 'disabled'}
+                onChange={(e) => updateUpdateSettings({ checkOnStartup: e.target.value === 'startup' })}
+              >
+                <option value="startup">On startup</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
+            <div className="speech-span-2 update-status-field">
+              <span>Update status</span>
+              <span className="update-summary">{updateSummary(update)}</span>
+            </div>
+            <div className="speech-key-row update-buttons">
+              <button
+                type="button"
+                className="fav-add"
+                disabled={update?.mode === 'disabled' || update?.status === 'checking' || update?.status === 'downloading'}
+                onClick={checkForUpdatesNow}
+              >
+                Check now
+              </button>
+              <button
+                type="button"
+                className="fav-add"
+                disabled={!updateSettings.skippedVersion}
+                onClick={() => updateUpdateSettings({ skippedVersion: '' })}
+              >
+                {updateSettings.skippedVersion ? `Clear skipped ${updateSettings.skippedVersion}` : 'No skipped version'}
+              </button>
+            </div>
             <label className="speech-span-2">
               Server URL
               <input
@@ -2753,6 +2861,20 @@ function App() {
           </>
         ) : null}
       </section>
+
+      {updatePromptOpen && update && (update.status === 'available' || update.status === 'downloading' || update.status === 'ready') ? (
+        <UpdatePrompt
+          state={update}
+          onDownload={() => void api().downloadUpdate().catch((error) => pushLog(error instanceof Error ? error.message : String(error)))}
+          onInstall={() => void api().installUpdate().catch((error) => pushLog(error instanceof Error ? error.message : String(error)))}
+          onOpenRelease={() => void api().openReleasePage().catch((error) => pushLog(error instanceof Error ? error.message : String(error)))}
+          onLater={closeUpdatePrompt}
+          onSkip={() => {
+            updateUpdateSettings({ skippedVersion: update.version });
+            setUpdateAsked(false);
+          }}
+        />
+      ) : null}
 
       <footer className="statusbar">
         <div className="cluster" title="Pane item counts (lit = active)">

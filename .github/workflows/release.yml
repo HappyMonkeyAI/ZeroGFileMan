@@ -1,0 +1,119 @@
+name: Release desktop builds
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Build Windows x64 release assets
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify source
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Build Windows installer and portable executable
+        run: npm run package:win
+
+      - name: Upload Windows release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml
+            !release/**/*__uninstaller*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish GitHub release
+    needs:
+      - windows
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Restore the annotated release tag
+        shell: bash
+        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
+      - name: Verify release version and assets
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          tag_version="${GITHUB_REF_NAME#v}"
+          tag_type="$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")"
+          [[ "$package_version" == "$tag_version" ]]
+          [[ "$tag_type" == "tag" ]]
+          shopt -s nullglob
+          windows_assets=(release-assets/*.exe)
+          ((${#windows_assets[@]} == 2))
+          [[ -f release-assets/latest.yml ]]
+          grep -qx "version: ${package_version}" release-assets/latest.yml
+          target="$(grep -m1 '^path: ' release-assets/latest.yml | sed 's/^path: //')"
+          [[ -n "$target" && -f "release-assets/${target}" ]]
+
+      - name: Generate asset checksums
+        shell: bash
+        run: |
+          (
+            cd release-assets
+            sha256sum ./*.exe > SHA256SUMS
+          )
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          assets=(release-assets/*)
+          release_flags=()
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then release_flags+=(--prerelease); fi
+          gh release create "${GITHUB_REF_NAME}" \
+            "${assets[@]}" \
+            --verify-tag \
+            --title "ZeroG FileMan ${GITHUB_REF_NAME}" \
+            "${release_flags[@]}" \
+            --generate-notes

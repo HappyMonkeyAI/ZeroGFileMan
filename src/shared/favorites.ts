@@ -46,6 +46,14 @@ export function removeFavoritePath(list: Favorite[], path: string): Favorite[] {
   return list.filter((f) => f.path.toLowerCase() !== path.toLowerCase());
 }
 
+export function renameFavoritePath(list: Favorite[], path: string, label: string): Favorite[] {
+  const nextLabel = label.trim();
+  if (!nextLabel) return list;
+  return list.map((favorite) =>
+    favorite.path.toLowerCase() === path.toLowerCase() ? { ...favorite, label: nextLabel } : favorite
+  );
+}
+
 export function isFavoritePath(list: Favorite[], path: string): boolean {
   return list.some((f) => f.path.toLowerCase() === path.toLowerCase());
 }

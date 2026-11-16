@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('fileman', {
   listLocalDrives: () => ipcRenderer.invoke('fs:drives'),
   listFavorites: () => ipcRenderer.invoke('favorites:list'),
   addFavorite: (path, label) => ipcRenderer.invoke('favorites:add', path, label),
+  renameFavorite: (path, label) => ipcRenderer.invoke('favorites:rename', path, label),
   removeFavorite: (path) => ipcRenderer.invoke('favorites:remove', path),
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
@@ -24,6 +25,16 @@ contextBridge.exposeInMainWorld('fileman', {
   saveSpeechApiKey: (key) => ipcRenderer.invoke('speechKey:save', key),
   clearSpeechApiKey: () => ipcRenderer.invoke('speechKey:clear'),
   transcribeViaServer: (request) => ipcRenderer.invoke('speech:transcribeServer', request),
+  updateState: () => ipcRenderer.invoke('updates:state'),
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
+  downloadUpdate: () => ipcRenderer.invoke('updates:download'),
+  installUpdate: () => ipcRenderer.invoke('updates:install'),
+  openReleasePage: () => ipcRenderer.invoke('updates:openRelease'),
+  onUpdateState: (callback) => {
+    const handler = (_event, state) => callback(state);
+    ipcRenderer.on('updates:state', handler);
+    return () => ipcRenderer.removeListener('updates:state', handler);
+  },
   showContextMenu: (target) => ipcRenderer.invoke('contextMenu:show', target),
   onMenuCommand: (callback) => {
     const handler = (_event, command) => callback(command);

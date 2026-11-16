@@ -4,6 +4,7 @@ import {
   clipboard,
   ipcMain,
   Menu,
+  net,
   safeStorage,
   session,
   shell,
@@ -16,7 +17,9 @@ import { buildContextMenu, parseContextMenuTarget } from '../shared/context-menu
 import { parseServerTranscriptionInput, transcribeViaServer } from '../shared/speech-server.js';
 import { isAppUrl, type AppLocation } from './app-origin.js';
 import { installApplicationMenu } from './app-menu.js';
-import { addFavorite, listFavorites, removeFavorite } from './favorites-store.js';
+import { addFavorite, listFavorites, removeFavorite, renameFavorite } from './favorites-store.js';
+import { LATEST_RELEASE_API, RELEASES_URL, safeReleaseUrl, updateMode } from '../shared/update.js';
+import { UpdateService, type InstallUpdater } from './update-service.js';
 import {
   copyLocalEntry,
   createLocalDirectory,
@@ -119,10 +122,40 @@ function asKind(value: unknown): FileEntry['kind'] {
   throw new Error('Invalid entry kind.');
 }
 
+const updates = new UpdateService({
+  mode: updateMode({ isPackaged: app.isPackaged, platform: process.platform, env: process.env }),
+  currentVersion: app.getVersion(),
+  loadUpdater: async () => {
+    const module = await import('electron-updater');
+    return (module.default ?? module).autoUpdater as unknown as InstallUpdater;
+  },
+  fetchLatest: async () => {
+    const response = await net.fetch(LATEST_RELEASE_API, {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'ZeroGFileMan-update-check' },
+      signal: AbortSignal.timeout(15_000)
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`GitHub answered ${response.status} to the update check.`);
+    return response.json();
+  },
+  onChange: (state) => mainWindow?.webContents.send('updates:state', state)
+});
+
+handle('updates:state', () => updates.current());
+handle('updates:check', () => updates.check());
+handle('updates:download', () => updates.download());
+handle('updates:install', () => updates.install());
+handle('updates:openRelease', () => {
+  const state = updates.current();
+  const url = 'releaseUrl' in state ? safeReleaseUrl(state.releaseUrl) : RELEASES_URL;
+  return shell.openExternal(url);
+});
+
 handle('fs:home', () => localHome());
 handle('fs:drives', () => listLocalDrives());
 handle('favorites:list', () => listFavorites());
 handle('favorites:add', (_e, path: unknown, label?: unknown) => addFavorite(path, label));
+handle('favorites:rename', (_e, path: unknown, label: unknown) => renameFavorite(path, label));
 handle('favorites:remove', (_e, path: unknown) => removeFavorite(path));
 handle('fs:list', (_e, path?: unknown) =>
   listLocalDirectory(typeof path === 'string' ? path : undefined)

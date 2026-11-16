@@ -26,6 +26,7 @@ Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan
 | D14 | Listing view modes | Details / Icons / Thumbnails + Ctrl+wheel scale; thumb caps |
 | D15 | Split layouts | Side-by-side / stacked + maximize; draggable gutter |
 | D16 | Terminal launcher pref | System / ZeroG Term / custom command from Settings |
+| D17 | App updates | Consent-based GitHub release checks; NSIS installs, portable notifies |
 
 ## Near-term (ordered)
 
@@ -45,7 +46,7 @@ Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan
 | P1.2 | Tab switches active pane | Tab focus LEFT ↔ RIGHT | done |
 | P1.3 | F-keys like classic commanders | F2 rename, F5 copy→, F6 move→, F7 mkdir, Del | done (ADR-0004) |
 | P1.4 | Copy/Move **to other pane** | Copy → / Move → toolbar + F5/F6 | done |
-| P1.5 | Editable favorites | Persist bookmarks in userData | done |
+| P1.5 | Editable favorites | Persist bookmarks in userData; rename/remove chips and active-path toggle | done |
 | P1.6 | Global jump (⌘K / Ctrl+K) | Focus brand-bar search; Enter → Navigate | done |
 
 ### P2 — Voice that works offline
@@ -75,6 +76,7 @@ Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan
 | P4.2 | App icon | Distinct FileMan dual-pane icon (`build/icon.*`); electron-builder + window chrome | done |
 | P4.3 | README quickstart | Screenshots optional; clear `npm start` path | done |
 | P4.4 | CI | GitHub Action: typecheck + test + build on push | done |
+| P4.5 | App updates | electron-updater, release-page fallback, Settings controls, tag release workflow | done |
 
 ## Later / park
 

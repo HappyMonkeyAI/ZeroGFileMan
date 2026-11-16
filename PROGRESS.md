@@ -24,6 +24,10 @@ Open check: builtin Whisper model download under the narrowed CSP `connect-src` 
 - SonarCloud removed for this repo: both FileMan projects deleted in the happymonkeyai SonarCloud org; the org-wide GitHub app is unchanged
 - Per-pane Windows drive dropdown (`fs:drives` / path chrome)
 - Per-pane refresh pill; multi-select with batch clipboard and F5/F6/delete
+- Consent-based app updates from GitHub releases: startup/manual checks, in-place updates for NSIS installs, release-page notifications for portable builds, and a tag-driven Windows release workflow
+- Update service covered by 27 tests; `npm run typecheck`, `npm test` (164 tests), and `npm run build` pass
+- Final Windows NSIS and portable artifacts rebuilt successfully as separate targets after the combined package command timed out
+- Favorites polish: the global picker now has explicit rename/remove controls, and the path action toggles between Add and Remove while preserving the existing `favorites.json` model
 
 ## Next
 

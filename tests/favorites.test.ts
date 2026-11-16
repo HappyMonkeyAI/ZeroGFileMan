@@ -4,6 +4,7 @@ import {
   isFavoritePath,
   normalizeFavorites,
   removeFavoritePath,
+  renameFavoritePath,
   upsertFavorite
 } from '../src/shared/favorites.js';
 
@@ -41,6 +42,18 @@ describe('favorites', () => {
     ];
     expect(isFavoritePath(list, 'c:\\a')).toBe(true);
     expect(removeFavoritePath(list, 'C:\\a')).toEqual([{ path: 'C:\\b', label: 'B' }]);
+  });
+
+  it('renames without reordering and ignores blank labels', () => {
+    const list = [
+      { path: 'C:\\a', label: 'A' },
+      { path: 'C:\\b', label: 'B' }
+    ];
+    expect(renameFavoritePath(list, 'c:\\B', 'Bee')).toEqual([
+      list[0],
+      { path: 'C:\\b', label: 'Bee' }
+    ]);
+    expect(renameFavoritePath(list, 'C:\\a', '  ')).toEqual(list);
   });
 
   it('labels Home / Documents / development', () => {

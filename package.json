@@ -49,6 +49,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",
+    "electron-updater": "^6.8.11",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
@@ -70,6 +71,14 @@
     "appId": "com.happymonkeyai.zerogfileman",
     "productName": "ZeroG FileMan",
     "asar": true,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "HappyMonkeyAI",
+        "repo": "ZeroGFileMan",
+        "releaseType": "release"
+      }
+    ],
     "directories": {
       "output": "release",
       "buildResources": "build"
