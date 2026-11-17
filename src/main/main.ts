@@ -11,9 +11,11 @@ import {
   type IpcMainInvokeEvent
 } from 'electron';
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { detectLocalApps } from './app-detect.js';
 import { buildContextMenu, parseContextMenuTarget } from '../shared/context-menu.js';
+import { resolveAppArgs } from '../shared/file-apps.js';
 import { parseServerTranscriptionInput, transcribeViaServer } from '../shared/speech-server.js';
 import { isAppUrl, type AppLocation } from './app-origin.js';
 import { installApplicationMenu } from './app-menu.js';
@@ -228,6 +230,33 @@ handle('shell:openTerminal', (_e, path: unknown, options?: unknown) => {
     path,
     launcher: opts.launcher,
     customCommand: opts.customCommand
+  });
+});
+
+handle('apps:detect', (_e, root: unknown) => detectLocalApps(root));
+
+handle('apps:open', async (_e, raw: unknown) => {
+  const request = (raw ?? {}) as { filePath?: unknown; command?: unknown; args?: unknown; cwd?: unknown };
+  const filePath = resolveLocalPath(request.filePath);
+  if (!existsSync(filePath)) throw new Error('That file no longer exists.');
+  const command = typeof request.command === 'string' ? request.command.trim() : '';
+  if (!command || !isAbsolute(command) || !existsSync(command)) throw new Error('App executable not found.');
+  if (!/\.(exe|com|cmd|bat)$/i.test(command)) throw new Error('The app must be an executable file.');
+  const args = Array.isArray(request.args) ? request.args : [];
+  if (
+    args.length > 32 ||
+    args.some((arg) => typeof arg !== 'string' || arg.length > 2048 || /[\0\r\n]/.test(arg))
+  ) {
+    throw new Error('Invalid app arguments.');
+  }
+  const cwd =
+    typeof request.cwd === 'string' && request.cwd && isAbsolute(request.cwd) && existsSync(request.cwd)
+      ? request.cwd
+      : undefined;
+  const resolved = resolveAppArgs(args as string[], filePath);
+  await new Promise<void>((resolvePromise, reject) => {
+    spawnDetached(command, resolved, { cwd, onError: reject });
+    setTimeout(resolvePromise, 150);
   });
 });
 

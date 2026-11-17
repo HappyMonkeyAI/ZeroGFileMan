@@ -1761,3 +1761,52 @@ select {
   font-size: 12px;
   z-index: 1000;
 }
+
+.speech-span-all {
+  grid-column: 1 / -1;
+}
+
+.fileapps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  border-top: 1px solid var(--divider);
+  padding-top: 6px;
+}
+
+.fileapps-detected {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fileapps-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  min-width: 0;
+}
+
+.fileapps-meta {
+  flex: 1;
+  color: var(--muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileapps-add {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 6px;
+  align-items: center;
+}
