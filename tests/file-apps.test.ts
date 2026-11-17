@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   allFileApps,
+  appCommandProblem,
   appsForExtension,
   BUILTIN_FILE_APPS,
   customFileApp,
@@ -232,5 +233,21 @@ describe('context menu open-with entries', () => {
     expect(() =>
       parseContextMenuTarget({ ...target, openWith: Array.from({ length: 13 }, () => ({ label: 'x', appId: 'a' })) })
     ).toThrow();
+  });
+});
+
+describe('appCommandProblem', () => {
+  it('requires a Windows executable extension on win32', () => {
+    expect(appCommandProblem('C:\\Apps\\Viewer.exe', 'win32')).toBeNull();
+    expect(appCommandProblem('C:\\Apps\\run.CMD', 'win32')).toBeNull();
+    expect(appCommandProblem('C:\\Apps\\viewer.txt', 'win32')).toBe('The app must be an executable file.');
+    expect(appCommandProblem('C:\\Apps\\viewer', 'win32')).toBe('The app must be an executable file.');
+    expect(appCommandProblem('', 'win32')).toBe('App executable not found.');
+  });
+
+  it('accepts extension-less executables on POSIX', () => {
+    expect(appCommandProblem('/usr/bin/markdown-viewer', 'linux')).toBeNull();
+    expect(appCommandProblem('/Applications/Viewer.app/Contents/MacOS/Viewer', 'darwin')).toBeNull();
+    expect(appCommandProblem('', 'linux')).toBe('App executable not found.');
   });
 });

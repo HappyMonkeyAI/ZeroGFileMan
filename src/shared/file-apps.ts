@@ -116,6 +116,15 @@ export function resolveAppArgs(args: readonly string[], filePath: string): strin
   return args.map((arg) => arg.split('{file}').join(filePath));
 }
 
+/** Executable shape check per platform; POSIX executables need no extension. */
+export function appCommandProblem(command: string, platform: string): string | null {
+  if (!command) return 'App executable not found.';
+  if (platform === 'win32' && !/\.(exe|com|cmd|bat)$/i.test(command)) {
+    return 'The app must be an executable file.';
+  }
+  return null;
+}
+
 function slug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'app';
 }

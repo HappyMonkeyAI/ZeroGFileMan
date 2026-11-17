@@ -11,11 +11,12 @@ import {
   type IpcMainInvokeEvent
 } from 'electron';
 import { existsSync } from 'node:fs';
+import { access, constants } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { detectLocalApps } from './app-detect.js';
 import { buildContextMenu, parseContextMenuTarget } from '../shared/context-menu.js';
-import { resolveAppArgs } from '../shared/file-apps.js';
+import { appCommandProblem, resolveAppArgs } from '../shared/file-apps.js';
 import { parseServerTranscriptionInput, transcribeViaServer } from '../shared/speech-server.js';
 import { isAppUrl, type AppLocation } from './app-origin.js';
 import { installApplicationMenu } from './app-menu.js';
@@ -241,7 +242,15 @@ handle('apps:open', async (_e, raw: unknown) => {
   if (!existsSync(filePath)) throw new Error('That file no longer exists.');
   const command = typeof request.command === 'string' ? request.command.trim() : '';
   if (!command || !isAbsolute(command) || !existsSync(command)) throw new Error('App executable not found.');
-  if (!/\.(exe|com|cmd|bat)$/i.test(command)) throw new Error('The app must be an executable file.');
+  const commandProblem = appCommandProblem(command, process.platform);
+  if (commandProblem) throw new Error(commandProblem);
+  if (process.platform !== 'win32') {
+    try {
+      await access(command, constants.X_OK);
+    } catch {
+      throw new Error('The app must be an executable file.');
+    }
+  }
   const args = Array.isArray(request.args) ? request.args : [];
   if (
     args.length > 32 ||
