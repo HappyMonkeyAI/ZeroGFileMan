@@ -62,6 +62,7 @@ Nothing downloads or installs without explicit consent. **Later** hides the prom
 - Dual local panes with breadcrumbs, history (Alt+←/→), favorites, Ctrl+K jump
 - Favorites bar with direct open, rename, remove, and an add/remove toggle for the active path
 - CRUD + cross-pane clipboard; F5/F6 copy/move to the other pane
+- File-type associations: apps in your development store that declare file associations are detected automatically; pick a default app per extension or add any program in Settings → File apps
 - Per-pane **Navigate** / **Action** jewels: click-toggle or hold-to-talk; Esc cancels
 - Speech engines: demo transcript, builtin Whisper (Transformers.js), or OpenAI-compatible server (API key in OS safeStorage)
 - Consent-based Windows update checks through the GitHub releases API

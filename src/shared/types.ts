@@ -1,5 +1,6 @@
 import type { Favorite } from './favorites.js';
 import type { ContextMenuTarget } from './context-menu.js';
+import type { DetectedApp } from './file-apps.js';
 import type { ServerTranscriptionInput } from './speech-server.js';
 import type { TerminalLauncher } from './terminal-launcher.js';
 import type { UpdateState } from './update.js';
@@ -93,6 +94,10 @@ export interface FileManApi {
   openPath(path: string): Promise<void>;
   showItemInFolder(path: string): Promise<void>;
   openWith(path: string, app: OpenWithApp | string): Promise<void>;
+  /** Scan the development store for apps that declare file associations. */
+  detectFileApps(root?: string): Promise<DetectedApp[]>;
+  /** Launch a detected/custom app with one file; main validates the command. */
+  openWithApp(request: { filePath: string; command: string; args: string[]; cwd?: string }): Promise<void>;
   openTerminal(path: string, options?: OpenTerminalOptions): Promise<void>;
   speechApiKeyStatus(): Promise<SpeechApiKeyStatus>;
   saveSpeechApiKey(key: string): Promise<SpeechApiKeyStatus>;

@@ -2,7 +2,7 @@
 
 ## Current
 
-In-app name dialog (New Folder / New File / Rename / favorite naming) and Explorer-style drag-drop inside and between panes, on top of the drive picker, per-pane refresh, and multi-select (Ctrl/Shift/Ctrl+A) with batch copy/cut/paste/F5/F6/delete.
+File-type associations with auto-detected local apps (Settings → File apps), plus the in-app name dialog (New Folder / New File / Rename / favorite naming) and Explorer-style drag-drop inside and between panes, on top of the drive picker, per-pane refresh, and multi-select (Ctrl/Shift/Ctrl+A) with batch copy/cut/paste/F5/F6/delete.
 
 Public on GitHub since 2026-11-10 (HappyMonkeyAI/ZeroGFileMan, MIT). The history was rewritten before publishing: personal email only, no LAN IPs or home paths. The pre-public history and code-review PRs #1–#3 are in the archived private repo `HappyMonkeyAI/ZeroGFileMan-archive`. PR numbers in this repo restart at #1.
 
@@ -28,6 +28,7 @@ Open check: builtin Whisper model download under the narrowed CSP `connect-src` 
 - Update service covered by 27 tests; `npm run typecheck`, `npm test` (164 tests), and `npm run build` pass
 - Final Windows NSIS and portable artifacts rebuilt successfully as separate targets after the combined package command timed out
 - Favorites polish: the global picker now has explicit rename/remove controls, and the path action toggles between Add and Remove while preserving the existing `favorites.json` model
+- File-type associations: the development store is scanned for apps declaring `build.fileAssociations` (unpacked exe → portable → dev Electron fallback); Settings → File apps lists detected apps, sets a default app per extension, and adds custom programs with a `{file}` argument template; Open/double-click and the right-click menu honor the associations through the injection-safe spawner (25 new tests; 213 total)
 - In-app name dialog replaces `window.prompt` (Electron never implements it): New Folder, New File type/name, Rename (F2) and favorite naming now work in both panes; inline validation, Esc/Cancel aborts, new folders land selected
 - Explorer-style drag-drop inside and between panes: drag = move, Ctrl = copy, Shift = force move, cross-drive defaults to copy; targets are folder rows/tiles, pane background, ".." and breadcrumbs; whole-selection drag; both panes refresh and the transcript logs each op; same-folder moves and drops into a folder's own subtree are no-ops
 - Name dialog + drag-drop rules covered by 24 new tests (188 total); `npm run ci` passes; verified in a real hidden Electron window against a temp filesystem: 14/14 UI checks (dialog in the right pane, invalid-name error, Esc cancel, F2 rename, cross-pane move, Ctrl copy, folder-row drop, same-folder no-op)

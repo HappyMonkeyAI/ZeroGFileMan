@@ -50,6 +50,7 @@ Repo: [HappyMonkeyAI/ZeroGFileMan](https://github.com/HappyMonkeyAI/ZeroGFileMan
 | P1.6 | Global jump (⌘K / Ctrl+K) | Focus brand-bar search; Enter → Navigate | done |
 | P1.7 | In-app name dialog | Electron has no `window.prompt`; New Folder / New File / Rename / favorite naming use a validated dialog | done |
 | P1.8 | Drag-drop between panes | Drag = move, Ctrl = copy, Shift = force move; folder rows, pane background, "..", breadcrumbs as targets; multi-select drag | done |
+| P1.9 | File-type associations | Auto-detect dev-store apps via `build.fileAssociations`; per-extension defaults + custom apps in Settings; Open and right-click honor them | done |
 
 ### P2 — Voice that works offline
 

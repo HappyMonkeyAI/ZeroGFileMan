@@ -7,12 +7,19 @@
 
 export type ContextMenuTargetKind = 'file' | 'directory' | 'symlink' | 'background';
 
+export type ContextMenuOpenWith = {
+  label: string;
+  appId: string;
+};
+
 export type ContextMenuTarget = {
   kind: ContextMenuTargetKind;
   /** Something is on the FileMan clipboard (copy/cut). */
   canPaste: boolean;
   /** The other pane shows a different folder, so copy/move-to-other make sense. */
   canTransfer: boolean;
+  /** Extra "Open with …" apps for the clicked file's extension. */
+  openWith?: ContextMenuOpenWith[];
 };
 
 /** Commands only the context menu sends; they act on the selected entry. */
@@ -36,10 +43,28 @@ export function parseContextMenuTarget(raw: unknown): ContextMenuTarget {
   if (typeof source.kind !== 'string' || !(KINDS as string[]).includes(source.kind)) {
     throw new Error('Invalid context menu target.');
   }
+  const openWith: ContextMenuOpenWith[] = [];
+  if (source.openWith !== undefined) {
+    if (!Array.isArray(source.openWith) || source.openWith.length > 12) {
+      throw new Error('Invalid context menu target.');
+    }
+    for (const entry of source.openWith) {
+      if (!entry || typeof entry !== 'object') throw new Error('Invalid context menu target.');
+      const { label, appId } = entry as Record<string, unknown>;
+      if (
+        typeof label !== 'string' || !label.trim() || label.length > 80 ||
+        typeof appId !== 'string' || !/^[a-z0-9:._-]{1,120}$/i.test(appId)
+      ) {
+        throw new Error('Invalid context menu target.');
+      }
+      openWith.push({ label, appId });
+    }
+  }
   return {
     kind: source.kind as ContextMenuTargetKind,
     canPaste: source.canPaste === true,
-    canTransfer: source.canTransfer === true
+    canTransfer: source.canTransfer === true,
+    ...(openWith.length ? { openWith } : {})
   };
 }
 
@@ -73,7 +98,8 @@ export function buildContextMenu(target: ContextMenuTarget, platform: NodeJS.Pla
     : [
         item('Open', 'item:open'),
         ...(windows ? [item('Open with Notepad', 'file:open-notepad')] : []),
-        item('Open with Cursor', 'item:open-cursor')
+        item('Open with Cursor', 'item:open-cursor'),
+        ...(target.openWith ?? []).map((app) => item(`Open with ${app.label}`, `item:open-app:${app.appId}`))
       ];
 
   return [

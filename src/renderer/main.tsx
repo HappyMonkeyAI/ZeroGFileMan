@@ -23,6 +23,22 @@ import {
   parentLocal
 } from '../shared/files.js';
 import type { ContextMenuTargetKind } from '../shared/context-menu.js';
+import {
+  allFileApps,
+  appsForExtension,
+  BUILTIN_FILE_APPS,
+  detectedFileApp,
+  extensionOptions,
+  fileExtension,
+  OPEN_APP_COMMAND_PREFIX,
+  parseExtensionList,
+  parseFileAppPrefs,
+  resolveAppArgs,
+  resolveDefaultApp,
+  type DetectedApp,
+  type FileApp,
+  type FileAppPrefs
+} from '../shared/file-apps.js';
 import { endpointNotices } from '../shared/endpoints.js';
 import { entryNameProblem } from '../shared/entry-name.js';
 import { templateChoice } from '../shared/text-dialog.js';
@@ -105,6 +121,7 @@ import {
 } from './speech-models.js';
 import { loadStoredSpeechSettings, storeSpeechSettings } from './speech-settings.js';
 import { loadStoredTerminalPrefs, storeTerminalPrefs } from './terminal-prefs.js';
+import { loadStoredFileAppPrefs, storeFileAppPrefs } from './file-apps-settings.js';
 import {
   applyTheme,
   isThemeId,
@@ -416,6 +433,8 @@ function FilePane(props: {
   onRefreshPeer?: () => void;
   onRegisterCommands: (commands: PaneCommands | null) => void;
   askText: AskText;
+  onOpenFile: (path: string, name: string) => Promise<void>;
+  openWithFor: (name: string) => FileApp[];
 }) {
   const {
     side,
@@ -436,16 +455,26 @@ function FilePane(props: {
     onToggleMaximize,
     onRefreshPeer,
     onRegisterCommands,
-    askText
+    askText,
+    onOpenFile,
+    openWithFor
   } = props;
 
   const showMenu = useCallback(
-    (kind: ContextMenuTargetKind) => {
+    (kind: ContextMenuTargetKind, entryName?: string) => {
+      const openWith = entryName
+        ? openWithFor(entryName).map((app) => ({ label: app.name, appId: app.id }))
+        : [];
       void api()
-        .showContextMenu({ kind, canPaste: Boolean(clipboard), canTransfer: otherPath !== pane.path })
+        .showContextMenu({
+          kind,
+          canPaste: Boolean(clipboard),
+          canTransfer: otherPath !== pane.path,
+          ...(openWith.length ? { openWith } : {})
+        })
         .catch((error: unknown) => onLog(`Context menu failed: ${describeError(error)}`));
     },
-    [clipboard, onLog, otherPath, pane.path]
+    [clipboard, onLog, openWithFor, otherPath, pane.path]
   );
 
   const openTerminalHere = useCallback(
@@ -1316,7 +1345,9 @@ function FilePane(props: {
       copyPath: () => void api().copyText(pane.path).then(() => onLog(`[${stamp()}] copy path ${pane.path}`)),
       open: () => {
         const sel = requireSelection();
-        if (sel) void api().openPath(sel.path);
+        if (!sel) return;
+        if (sel.kind === 'file') void onOpenFile(sel.path, sel.name);
+        else void api().openPath(sel.path);
       },
       openNotepad: () => {
         const sel = requireSelection();
@@ -1347,7 +1378,7 @@ function FilePane(props: {
         const sel = requireSelection();
         if (!sel) return;
         if (sel.kind === 'directory' || sel.kind === 'symlink') void navigateTo(sel.path);
-        else void runReported(`Open “${sel.name}”`, () => api().openPath(sel.path), onLog);
+        else void runReported(`Open “${sel.name}”`, () => onOpenFile(sel.path, sel.name), onLog);
       },
       openCursor: () => {
         const sel = requireSelection();
@@ -1392,6 +1423,7 @@ function FilePane(props: {
     goForward,
     navigateTo,
     onLog,
+    onOpenFile,
     onRegisterCommands,
     openPathEdit,
     openTerminalHere,
@@ -1705,7 +1737,7 @@ function FilePane(props: {
             event.preventDefault();
             event.stopPropagation();
             if (!selected) setSelection(exclusiveSelect(entry.name));
-            showMenu(entry.kind);
+            showMenu(entry.kind, entry.name);
           };
           const onEntryClick = (event: ReactMouseEvent) => {
             selectEntry(entry.name, {
@@ -1717,7 +1749,7 @@ function FilePane(props: {
             if (entry.kind === 'directory' || entry.kind === 'symlink') {
               void navigateTo(fullPath);
             } else {
-              void api().openPath(fullPath);
+              void onOpenFile(fullPath, entry.name);
             }
           };
           if (pane.viewMode === 'details') {
@@ -1840,6 +1872,9 @@ function App() {
   const [dismissedUpdate, setDismissedUpdate] = useState<string | null>(null);
   const [updateAsked, setUpdateAsked] = useState(false);
   const [updateSettings, setUpdateSettings] = useState<UpdateSettings>(() => loadStoredUpdateSettings());
+  const [fileAppPrefs, setFileAppPrefs] = useState<FileAppPrefs>(() => loadStoredFileAppPrefs());
+  const [detectedApps, setDetectedApps] = useState<DetectedApp[]>([]);
+  const [appDraft, setAppDraft] = useState({ name: '', command: '', args: '{file}', extensions: '' });
   const { askText, dialog: textDialog } = useTextDialog();
   const startupCheckDone = useRef(false);
   const leftCommands = useRef<PaneCommands | null>(null);
@@ -1892,6 +1927,93 @@ function App() {
       return next;
     });
   }, []);
+
+  const updateFileApps = useCallback((patch: Partial<FileAppPrefs>) => {
+    setFileAppPrefs((prev) => {
+      const next = parseFileAppPrefs({ ...prev, ...patch });
+      storeFileAppPrefs(next);
+      return next;
+    });
+  }, []);
+
+  const rescanApps = useCallback(() => {
+    void api()
+      .detectFileApps(fileAppPrefs.appsRoot)
+      .then(setDetectedApps)
+      .catch((error) => pushLog(`App scan failed: ${describeError(error)}`));
+  }, [fileAppPrefs.appsRoot, pushLog]);
+
+  useEffect(() => {
+    rescanApps();
+  }, [rescanApps]);
+
+  const detectedFileApps = useMemo(() => detectedApps.map(detectedFileApp), [detectedApps]);
+
+  const launchApp = useCallback(async (app: FileApp, path: string) => {
+    if (app.kind === 'builtin') {
+      await api().openWith(path, app.id);
+      return;
+    }
+    if (!app.launch) throw new Error(`${app.name} has no launch command.`);
+    await api().openWithApp({
+      filePath: path,
+      command: app.launch.command,
+      args: resolveAppArgs(app.launch.args, path),
+      cwd: app.launch.cwd
+    });
+  }, []);
+
+  const openFile = useCallback(
+    async (path: string, name: string) => {
+      const app = resolveDefaultApp(name, detectedFileApps, fileAppPrefs);
+      if (!app) {
+        await api().openPath(path);
+        return;
+      }
+      await launchApp(app, path);
+    },
+    [detectedFileApps, fileAppPrefs, launchApp]
+  );
+
+  const openWithFor = useCallback(
+    (name: string) => {
+      const ext = fileExtension(name);
+      return ext ? appsForExtension(ext, detectedFileApps, fileAppPrefs) : [];
+    },
+    [detectedFileApps, fileAppPrefs]
+  );
+
+  const addCustomApp = useCallback(() => {
+    const name = appDraft.name.trim();
+    const command = appDraft.command.trim();
+    const extensions = parseExtensionList(appDraft.extensions);
+    if (!name || !command) {
+      pushLog('App needs a name and an executable path.');
+      return;
+    }
+    if (!extensions.length) {
+      pushLog('App needs at least one extension (e.g. md, markdown).');
+      return;
+    }
+    const base = `custom:${name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'app'}`;
+    let id = base;
+    for (let n = 2; fileAppPrefs.customApps.some((app) => app.id === id); n += 1) id = `${base}-${n}`;
+    updateFileApps({
+      customApps: [...fileAppPrefs.customApps, { id, name, command, args: appDraft.args.trim() || '{file}', extensions }]
+    });
+    setAppDraft({ name: '', command: '', args: '{file}', extensions: '' });
+    pushLog(`[${stamp()}] added app ${name} (${extensions.join(' ')})`);
+  }, [appDraft, fileAppPrefs.customApps, pushLog, updateFileApps]);
+
+  const removeCustomApp = useCallback(
+    (id: string) => {
+      updateFileApps({
+        customApps: fileAppPrefs.customApps.filter((app) => app.id !== id),
+        defaults: Object.fromEntries(Object.entries(fileAppPrefs.defaults).filter(([, value]) => value !== id))
+      });
+    },
+    [fileAppPrefs.customApps, fileAppPrefs.defaults, updateFileApps]
+  );
 
   const checkForUpdatesNow = useCallback(() => {
     setUpdateAsked(true);
@@ -2256,10 +2378,18 @@ function App() {
           pushLog('ZeroG FileMan — local dual-pane voice file manager (HappyMonkeyAI)');
           break;
         default:
+          if (command.startsWith(OPEN_APP_COMMAND_PREFIX)) {
+            const appId = command.slice(OPEN_APP_COMMAND_PREFIX.length);
+            const app = allFileApps(detectedFileApps, fileAppPrefs).find((entry) => entry.id === appId);
+            const target = c?.selectedItemPath();
+            if (app && target) {
+              void runReported(`Open with ${app.name}`, () => launchApp(app, target), pushLog);
+            }
+          }
           break;
       }
     });
-  }, [active, addCurrentFavorite, checkForUpdatesNow, focusJump, pushLog]);
+  }, [active, addCurrentFavorite, checkForUpdatesNow, detectedFileApps, fileAppPrefs, focusJump, launchApp, pushLog]);
 
   const runGlobalJump = async () => {
     const q = jumpQuery.trim();
@@ -2552,6 +2682,8 @@ function App() {
             onToggleMaximize={() => updateWorkspaceLayout(toggleMaximize(workspaceLayout, 'left'))}
             onRefreshPeer={() => refreshSide('right')}
             askText={askText}
+            onOpenFile={openFile}
+            openWithFor={openWithFor}
             onRegisterCommands={(c) => {
               leftCommands.current = c;
             }}
@@ -2618,6 +2750,8 @@ function App() {
             onToggleMaximize={() => updateWorkspaceLayout(toggleMaximize(workspaceLayout, 'right'))}
             onRefreshPeer={() => refreshSide('left')}
             askText={askText}
+            onOpenFile={openFile}
+            openWithFor={openWithFor}
             onRegisterCommands={(c) => {
               rightCommands.current = c;
             }}
@@ -2868,6 +3002,97 @@ function App() {
                 onClick={() => updateUpdateSettings({ skippedVersion: '' })}
               >
                 {updateSettings.skippedVersion ? `Clear skipped ${updateSettings.skippedVersion}` : 'No skipped version'}
+              </button>
+            </div>
+            <div className="speech-span-all fileapps-head">
+              <span>File apps</span>
+              <button type="button" className="fav-add" onClick={rescanApps}>
+                Rescan
+              </button>
+            </div>
+            <label className="speech-span-2">
+              Apps folder
+              <input
+                value={fileAppPrefs.appsRoot}
+                placeholder="Default: ~/Documents/development"
+                title="Development-store folder scanned for apps that declare file associations"
+                onChange={(e) => updateFileApps({ appsRoot: e.target.value })}
+              />
+            </label>
+            <div className="speech-span-2 fileapps-detected">
+              {detectedApps.length ? (
+                detectedApps.map((app) => (
+                  <div key={app.id} className="fileapps-row" title={app.projectDir}>
+                    <span>
+                      {app.name}
+                      {app.version ? ` ${app.version}` : ''}
+                    </span>
+                    <span className="fileapps-meta">
+                      {app.extensions.join(' ')} · {app.source}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="fileapps-meta">No apps detected — projects need build.fileAssociations in package.json.</div>
+              )}
+            </div>
+            {extensionOptions(detectedFileApps, fileAppPrefs).map((ext) => (
+              <label key={ext}>
+                {ext} default
+                <select
+                  value={fileAppPrefs.defaults[ext] ?? ''}
+                  onChange={(e) =>
+                    updateFileApps({ defaults: { ...fileAppPrefs.defaults, [ext]: e.target.value } })
+                  }
+                >
+                  <option value="">System default</option>
+                  {BUILTIN_FILE_APPS.map((app) => (
+                    <option key={app.id} value={app.id}>
+                      {app.name}
+                    </option>
+                  ))}
+                  {appsForExtension(ext, detectedFileApps, fileAppPrefs).map((app) => (
+                    <option key={app.id} value={app.id}>
+                      {app.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            {fileAppPrefs.customApps.map((app) => (
+              <div key={app.id} className="speech-span-all fileapps-row">
+                <span>{app.name}</span>
+                <span className="fileapps-meta" title={app.command}>
+                  {app.extensions.join(' ')}
+                </span>
+                <button type="button" className="fav-add" onClick={() => removeCustomApp(app.id)}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <div className="speech-span-all fileapps-add">
+              <input
+                value={appDraft.name}
+                placeholder="App name"
+                onChange={(e) => setAppDraft({ ...appDraft, name: e.target.value })}
+              />
+              <input
+                value={appDraft.command}
+                placeholder="C:\Path\To\App.exe"
+                onChange={(e) => setAppDraft({ ...appDraft, command: e.target.value })}
+              />
+              <input
+                value={appDraft.args}
+                placeholder='Arguments, e.g. "{file}"'
+                onChange={(e) => setAppDraft({ ...appDraft, args: e.target.value })}
+              />
+              <input
+                value={appDraft.extensions}
+                placeholder="Extensions: md, markdown"
+                onChange={(e) => setAppDraft({ ...appDraft, extensions: e.target.value })}
+              />
+              <button type="button" className="fav-add" onClick={addCustomApp}>
+                Add app
               </button>
             </div>
             <label className="speech-span-2">
