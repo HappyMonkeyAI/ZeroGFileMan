@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent
 } from 'react';
@@ -24,6 +25,16 @@ import {
 import type { ContextMenuTargetKind } from '../shared/context-menu.js';
 import { endpointNotices } from '../shared/endpoints.js';
 import { entryNameProblem } from '../shared/entry-name.js';
+import { templateChoice } from '../shared/text-dialog.js';
+import {
+  DRAG_MIME,
+  decodeDragPayload,
+  dropMode,
+  encodeDragPayload,
+  planDrop,
+  type DropMode,
+  type DropMods
+} from '../shared/drag-drop.js';
 import { describeError, runReported } from '../shared/file-op.js';
 import { fuzzyMatchEntries, fuzzyMatchHits, parseActionCommand } from '../shared/fuzzy-path.js';
 import {
@@ -79,6 +90,7 @@ import type {
   TerminalPrefs,
   VoiceMode
 } from '../shared/types.js';
+import { shouldPrompt, type UpdateState } from '../shared/update.js';
 import { shouldStopJewelOnRelease } from '../shared/voice-jewel.js';
 import { Icon } from './icons.js';
 import { loadStoredWorkspaceLayout, storeWorkspaceLayout } from './layout-prefs.js';
@@ -101,6 +113,10 @@ import {
   type ThemeId
 } from './themes.js';
 import { loadStoredTranscriptDrawer, storeTranscriptDrawer } from './transcript-prefs.js';
+import { loadStoredUpdateSettings, storeUpdateSettings, type UpdateSettings } from './update-settings.js';
+import { UpdatePrompt } from './update-prompt.js';
+import { useTextDialog, type AskText } from './text-dialog.js';
+import { updateSummary } from './update-view.js';
 import { isMostlySilence, VoiceRecorder } from './voice.js';
 // Fonts are bundled rather than fetched from Google Fonts, so a launch makes
 // no network request and the UI looks the same offline.
@@ -111,6 +127,9 @@ import './styles.css';
 type VoicePhase = 'idle' | 'listening' | 'transcribing';
 
 const thumbCache = new Map<string, string | null>();
+
+// Paths being dragged inside the app; dragover events cannot read the payload.
+let activeDragPaths: string[] | null = null;
 
 function EntryThumbnail(props: {
   path: string;
@@ -396,6 +415,7 @@ function FilePane(props: {
   onToggleMaximize: () => void;
   onRefreshPeer?: () => void;
   onRegisterCommands: (commands: PaneCommands | null) => void;
+  askText: AskText;
 }) {
   const {
     side,
@@ -415,7 +435,8 @@ function FilePane(props: {
     onClipboard,
     onToggleMaximize,
     onRefreshPeer,
-    onRegisterCommands
+    onRegisterCommands,
+    askText
   } = props;
 
   const showMenu = useCallback(
@@ -675,23 +696,31 @@ function FilePane(props: {
   );
 
   const doNewFolder = useCallback(async () => {
-    const name = window.prompt('New folder name', 'New Folder');
-    if (!name?.trim()) return;
-    const nameProblem = entryNameProblem(name.trim(), isWindowsPath(pane.path) ? 'win32' : 'posix');
-    if (nameProblem) {
-      onLog(`New folder: ${nameProblem}`);
-      return;
-    }
+    const platform = isWindowsPath(pane.path) ? 'win32' : 'posix';
+    const name = await askText({
+      title: 'New folder',
+      defaultValue: 'New Folder',
+      validate: (value) => entryNameProblem(value, platform)
+    });
+    if (!name) return;
     await runReported(
-      `New folder “${name.trim()}”`,
+      `New folder “${name}”`,
       async () => {
-        await api().createLocalDirectory(joinLocal(pane.path, name.trim()));
-        await navigateTo(pane.path);
-        onLog(`[${stamp()}] mkdir ${name.trim()}`);
+        await api().createLocalDirectory(joinLocal(pane.path, name));
+        const next = await loadPane(pane.path);
+        onChange({
+          ...pane,
+          ...next,
+          ...exclusiveSelect(name),
+          matchNames: new Set(),
+          status: `Created ${name}`,
+          listening: null
+        });
+        onLog(`[${stamp()}] mkdir ${name}`);
       },
       onLog
     );
-  }, [navigateTo, onLog, pane.path]);
+  }, [askText, onChange, onLog, pane]);
 
   const FILE_TEMPLATES = useMemo(() => [
     { label: 'Text Document', ext: '.txt', content: '' },
@@ -707,30 +736,30 @@ function FilePane(props: {
   ], []);
 
   const doNewFile = useCallback(async () => {
-    const templateOptions = FILE_TEMPLATES.map(t => t.label).join('\n');
-    const selectedType = window.prompt(
-      `Choose file type:\n\n${templateOptions}\n\nEnter number (1-${FILE_TEMPLATES.length}):`,
-      '1'
-    );
-    if (!selectedType?.trim()) return;
-
-    const typeIndex = parseInt(selectedType.trim(), 10) - 1;
-    if (isNaN(typeIndex) || typeIndex < 0 || typeIndex >= FILE_TEMPLATES.length) {
-      onLog('New file: invalid file type selection');
-      return;
-    }
+    const selectedType = await askText({
+      title: 'New file — choose type',
+      message: FILE_TEMPLATES.map((t, i) => `${i + 1}. ${t.label}`).join('\n'),
+      defaultValue: '1',
+      confirmLabel: 'Next',
+      validate: (value) =>
+        templateChoice(value, FILE_TEMPLATES.length) === null
+          ? `Enter a number 1–${FILE_TEMPLATES.length}.`
+          : null
+    });
+    if (!selectedType) return;
+    const typeIndex = templateChoice(selectedType, FILE_TEMPLATES.length);
+    if (typeIndex === null) return;
 
     const template = FILE_TEMPLATES[typeIndex]!;
-    const defaultName = `New File${template.ext}`;
-    const name = window.prompt(`New ${template.label} name`, defaultName);
-    if (!name?.trim()) return;
-
-    const fileName = name.trim().endsWith(template.ext) ? name.trim() : name.trim() + template.ext;
-    const nameProblem = entryNameProblem(fileName, isWindowsPath(pane.path) ? 'win32' : 'posix');
-    if (nameProblem) {
-      onLog(`New file: ${nameProblem}`);
-      return;
-    }
+    const platform = isWindowsPath(pane.path) ? 'win32' : 'posix';
+    const withExt = (value: string) => (value.endsWith(template.ext) ? value : value + template.ext);
+    const name = await askText({
+      title: `New ${template.label} name`,
+      defaultValue: `New File${template.ext}`,
+      validate: (value) => entryNameProblem(withExt(value), platform)
+    });
+    if (!name) return;
+    const fileName = withExt(name);
 
     await runReported(
       `New file "${fileName}"`,
@@ -741,28 +770,29 @@ function FilePane(props: {
       },
       onLog
     );
-  }, [FILE_TEMPLATES, navigateTo, onLog, pane.path]);
+  }, [FILE_TEMPLATES, askText, navigateTo, onLog, pane.path]);
 
   const doRename = useCallback(async () => {
     const sel = requireSelection();
     if (!sel) return;
-    const next = window.prompt('Rename to', sel.name);
-    if (!next?.trim() || next.trim() === sel.name) return;
-    const nameProblem = entryNameProblem(next.trim(), isWindowsPath(pane.path) ? 'win32' : 'posix');
-    if (nameProblem) {
-      onLog(`Rename “${sel.name}”: ${nameProblem}`);
-      return;
-    }
+    const platform = isWindowsPath(pane.path) ? 'win32' : 'posix';
+    const next = await askText({
+      title: 'Rename',
+      message: sel.name,
+      defaultValue: sel.name,
+      validate: (value) => entryNameProblem(value, platform)
+    });
+    if (!next || next === sel.name) return;
     await runReported(
       `Rename “${sel.name}”`,
       async () => {
-        await api().renameLocalEntry(sel.path, joinLocal(pane.path, next.trim()));
+        await api().renameLocalEntry(sel.path, joinLocal(pane.path, next));
         await refresh();
-        onLog(`[${stamp()}] rename ${sel.name} → ${next.trim()}`);
+        onLog(`[${stamp()}] rename ${sel.name} → ${next}`);
       },
       onLog
     );
-  }, [onLog, pane.path, refresh, requireSelection]);
+  }, [askText, onLog, pane.path, refresh, requireSelection]);
 
   const doDelete = useCallback(async () => {
     const items = requireSelections();
@@ -832,6 +862,122 @@ function FilePane(props: {
       onLog(`[${stamp()}] paste: ${ok}/${clipboard.items.length} done`);
     }
   }, [clipboard, onClipboard, onLog, onRefreshPeer, pane.path, refresh]);
+
+  const [dropHint, setDropHint] = useState<{ target: string; mode: DropMode } | null>(null);
+  const dragDepth = useRef(new Map<string, number>());
+
+  const dragPreviewMode = useCallback((mods: DropMods, targetDir: string): DropMode => {
+    const source = activeDragPaths?.[0];
+    return source ? dropMode(mods, source, targetDir) : mods.ctrl ? 'copy' : 'move';
+  }, []);
+
+  const performDrop = useCallback(
+    async (paths: string[], targetDir: string, mods: DropMods) => {
+      const plan = planDrop(paths, targetDir, mods);
+      if (!plan.items.length) {
+        onLog(`[${stamp()}] drop: nothing to do here`);
+        return;
+      }
+      let ok = 0;
+      for (const item of plan.items) {
+        try {
+          const dest =
+            item.mode === 'copy'
+              ? await api().copyLocalEntry(item.path, targetDir)
+              : await api().moveLocalEntry(item.path, targetDir);
+          ok += 1;
+          onLog(`[${stamp()}] ${item.mode} → ${targetDir}: ${baseName(dest)}`);
+        } catch (error) {
+          onLog(describeError(error));
+        }
+      }
+      await refresh();
+      onRefreshPeer?.();
+      if (plan.items.length > 1) onLog(`[${stamp()}] drop: ${ok}/${plan.items.length} done`);
+    },
+    [onLog, onRefreshPeer, refresh]
+  );
+
+  const dropTargetProps = useCallback(
+    (targetDir: string) => {
+      const hasPayload = (event: ReactDragEvent) => Array.from(event.dataTransfer.types).includes(DRAG_MIME);
+      const modsOf = (event: ReactDragEvent): DropMods => ({
+        ctrl: event.ctrlKey || event.metaKey,
+        shift: event.shiftKey
+      });
+      const hint = (event: ReactDragEvent) => {
+        const mode = dragPreviewMode(modsOf(event), targetDir);
+        setDropHint((prev) =>
+          prev && prev.target === targetDir && prev.mode === mode ? prev : { target: targetDir, mode }
+        );
+      };
+      return {
+        onDragEnter: (event: ReactDragEvent) => {
+          if (!hasPayload(event)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          dragDepth.current.set(targetDir, (dragDepth.current.get(targetDir) ?? 0) + 1);
+          hint(event);
+        },
+        onDragOver: (event: ReactDragEvent) => {
+          if (!hasPayload(event)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = dragPreviewMode(modsOf(event), targetDir);
+          hint(event);
+        },
+        onDragLeave: (event: ReactDragEvent) => {
+          if (!hasPayload(event)) return;
+          event.stopPropagation();
+          const depth = (dragDepth.current.get(targetDir) ?? 1) - 1;
+          if (depth <= 0) {
+            dragDepth.current.delete(targetDir);
+            setDropHint((prev) => (prev?.target === targetDir ? null : prev));
+          } else {
+            dragDepth.current.set(targetDir, depth);
+          }
+        },
+        onDrop: (event: ReactDragEvent) => {
+          if (!hasPayload(event)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          dragDepth.current.delete(targetDir);
+          setDropHint(null);
+          const paths = decodeDragPayload(event.dataTransfer.getData(DRAG_MIME));
+          if (paths) void performDrop(paths, targetDir, modsOf(event));
+        }
+      };
+    },
+    [dragPreviewMode, performDrop]
+  );
+
+  const dragSourceProps = useCallback(
+    (fullPath: string, selected: boolean) => ({
+      draggable: true,
+      onDragStart: (event: ReactDragEvent) => {
+        const paths =
+          selected && selectedEntries.length > 1
+            ? selectedEntries.map((entry) => joinLocal(pane.path, entry.name))
+            : [fullPath];
+        activeDragPaths = paths;
+        event.dataTransfer.setData(DRAG_MIME, encodeDragPayload(paths));
+        event.dataTransfer.effectAllowed = 'copyMove';
+        if (paths.length > 1) {
+          const chip = document.createElement('div');
+          chip.className = 'drag-chip';
+          chip.textContent = `${paths.length} items`;
+          document.body.appendChild(chip);
+          event.dataTransfer.setDragImage(chip, 12, 12);
+          window.setTimeout(() => chip.remove(), 0);
+        }
+      },
+      onDragEnd: () => {
+        activeDragPaths = null;
+        setDropHint(null);
+      }
+    }),
+    [pane.path, selectedEntries]
+  );
 
   const applyNavigate = useCallback(
     async (transcript: string) => {
@@ -1330,7 +1476,8 @@ function FilePane(props: {
                     {driveRoot || index > 0 ? <span className="crumb-sep">/</span> : null}
                     <button
                       type="button"
-                      className={`crumb${index === pathCrumbs.length - 1 ? ' current' : ''}`}
+                      className={`crumb${index === pathCrumbs.length - 1 ? ' current' : ''}${dropHint?.target === crumb.path ? ' drop-target' : ''}`}
+                      {...dropTargetProps(crumb.path)}
                       onClick={() => void navigateTo(crumb.path)}
                     >
                       {crumb.label}
@@ -1499,7 +1646,8 @@ function FilePane(props: {
         </div>
       ) : null}
       <div
-        className={`listing listing-${pane.viewMode}`}
+        className={`listing listing-${pane.viewMode}${dropHint?.target === pane.path ? ' drop-target' : ''}`}
+        {...dropTargetProps(pane.path)}
         style={
           pane.viewMode === 'details'
             ? undefined
@@ -1526,7 +1674,8 @@ function FilePane(props: {
       >
         <button
           type="button"
-          className={pane.viewMode === 'details' ? 'entry' : 'tile'}
+          className={`${pane.viewMode === 'details' ? 'entry' : 'tile'}${dropHint?.target === parentLocal(pane.path) ? ' drop-target' : ''}`}
+          {...dropTargetProps(parentLocal(pane.path))}
           onDoubleClick={() => void navigateTo(parentLocal(pane.path))}
         >
           {pane.viewMode === 'details' ? (
@@ -1576,7 +1725,9 @@ function FilePane(props: {
               <button
                 key={entry.name}
                 type="button"
-                className={`entry${selected ? ' selected' : ''}${match ? ' match' : ''}`}
+                className={`entry${selected ? ' selected' : ''}${match ? ' match' : ''}${dropHint?.target === fullPath ? ' drop-target' : ''}`}
+                {...dragSourceProps(fullPath, selected)}
+                {...(entry.kind !== 'file' ? dropTargetProps(fullPath) : {})}
                 onClick={onEntryClick}
                 onDoubleClick={openEntry}
                 onContextMenu={onEntryContextMenu}
@@ -1596,7 +1747,9 @@ function FilePane(props: {
             <button
               key={entry.name}
               type="button"
-              className={`tile${selected ? ' selected' : ''}${match ? ' match' : ''}`}
+              className={`tile${selected ? ' selected' : ''}${match ? ' match' : ''}${dropHint?.target === fullPath ? ' drop-target' : ''}`}
+              {...dragSourceProps(fullPath, selected)}
+              {...(entry.kind !== 'file' ? dropTargetProps(fullPath) : {})}
               title={`${entry.name}\n${formatSize(entry)}`}
               onClick={onEntryClick}
               onDoubleClick={openEntry}
@@ -1622,6 +1775,11 @@ function FilePane(props: {
         })}
       </div>
       <div className="pane-footer">
+        {dropHint ? (
+          <span className="drop-hint">
+            {dropHint.mode === 'copy' ? 'Copy' : 'Move'} → {dropHint.target}
+          </span>
+        ) : null}
         <span>
           {selectedEntries.length === 0 ? (
             'No selection'
@@ -1678,6 +1836,12 @@ function App() {
     loadStoredTranscriptDrawer()
   );
   const [log, setLog] = useState<string[]>([`[${stamp()}] ZeroG FileMan ready · dual commander`]);
+  const [update, setUpdate] = useState<UpdateState | null>(null);
+  const [dismissedUpdate, setDismissedUpdate] = useState<string | null>(null);
+  const [updateAsked, setUpdateAsked] = useState(false);
+  const [updateSettings, setUpdateSettings] = useState<UpdateSettings>(() => loadStoredUpdateSettings());
+  const { askText, dialog: textDialog } = useTextDialog();
+  const startupCheckDone = useRef(false);
   const leftCommands = useRef<PaneCommands | null>(null);
   const rightCommands = useRef<PaneCommands | null>(null);
   const jumpInputRef = useRef<HTMLInputElement | null>(null);
@@ -1721,6 +1885,24 @@ function App() {
     });
   }, []);
 
+  const updateUpdateSettings = useCallback((patch: Partial<UpdateSettings>) => {
+    setUpdateSettings((prev) => {
+      const next = { ...prev, ...patch };
+      storeUpdateSettings(next);
+      return next;
+    });
+  }, []);
+
+  const checkForUpdatesNow = useCallback(() => {
+    setUpdateAsked(true);
+    void api().checkForUpdates().catch((error) => pushLog(error instanceof Error ? error.message : String(error)));
+  }, [pushLog]);
+
+  const closeUpdatePrompt = useCallback(() => {
+    if (update && 'version' in update) setDismissedUpdate(update.version);
+    setUpdateAsked(false);
+  }, [update]);
+
   useEffect(() => {
     applyTheme(theme);
     storeTheme(theme);
@@ -1732,6 +1914,20 @@ function App() {
       .then(setSpeechKeyStatus)
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    void api().updateState().then(setUpdate).catch(() => undefined);
+    return api().onUpdateState(setUpdate);
+  }, []);
+
+  useEffect(() => {
+    if (startupCheckDone.current || !updateSettings.checkOnStartup) return;
+    const timer = window.setTimeout(() => {
+      startupCheckDone.current = true;
+      void api().checkForUpdates().catch(() => undefined);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [updateSettings.checkOnStartup]);
 
   const cmds = () => (active === 'left' ? leftCommands.current : rightCommands.current);
 
@@ -1790,6 +1986,21 @@ function App() {
       }
     },
     [pushLog]
+  );
+
+  const renameFavoriteChip = useCallback(
+    async (favorite: Favorite) => {
+      const label = await askText({ title: 'Favorite name', defaultValue: favorite.label });
+      if (label === null || label === favorite.label) return;
+      try {
+        const next = await api().renameFavorite(favorite.path, label);
+        setFavorites(next);
+        pushLog(`[${stamp()}] favorite renamed ${favorite.path} → ${label}`);
+      } catch (error) {
+        pushLog(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [askText, pushLog]
   );
 
   const refreshSide = useCallback((side: 'left' | 'right') => {
@@ -2038,6 +2249,9 @@ function App() {
         case 'voice:action':
           c?.voiceAction();
           break;
+        case 'help:check-updates':
+          checkForUpdatesNow();
+          break;
         case 'help:about':
           pushLog('ZeroG FileMan — local dual-pane voice file manager (HappyMonkeyAI)');
           break;
@@ -2045,7 +2259,7 @@ function App() {
           break;
       }
     });
-  }, [active, addCurrentFavorite, focusJump, pushLog]);
+  }, [active, addCurrentFavorite, checkForUpdatesNow, focusJump, pushLog]);
 
   const runGlobalJump = async () => {
     const q = jumpQuery.trim();
@@ -2059,6 +2273,7 @@ function App() {
 
   const activePath = (active === 'left' ? left : right)?.path ?? '';
   const activeIsFavorite = isFavoritePath(favorites, activePath);
+  const updatePromptOpen = shouldPrompt(update, updateSettings.skippedVersion, dismissedUpdate, updateAsked);
 
   if (!left || !right) {
     return (
@@ -2128,6 +2343,15 @@ function App() {
           <option value="nord">Nord</option>
           <option value="dracula">Dracula</option>
         </select>
+        <button
+          type="button"
+          className="update-button"
+          title={updateSummary(update)}
+          disabled={update?.mode === 'disabled' || update?.status === 'checking' || update?.status === 'downloading'}
+          onClick={checkForUpdatesNow}
+        >
+          Updates
+        </button>
       </header>
 
       <section className="favorites-bar" aria-label="Favorites">
@@ -2136,41 +2360,47 @@ function App() {
         </span>
         <div className="favorites-chips">
           {favorites.map((fav) => (
-            <button
+            <div
               key={fav.path}
-              type="button"
               className={`fav-chip${fav.path.toLowerCase() === activePath.toLowerCase() ? ' current' : ''}`}
               title={fav.path}
-              onClick={() => void goActive(fav.path)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                void removeFavoriteChip(fav.path);
-              }}
             >
-              <span>{fav.label}</span>
-              <span
+              <button
+                type="button"
+                className="fav-open"
+                onClick={() => void goActive(fav.path)}
+              >
+                {fav.label}
+              </button>
+              <button
+                type="button"
+                className="fav-rename"
+                title={`Rename ${fav.label}`}
+                aria-label={`Rename ${fav.label}`}
+                onClick={() => void renameFavoriteChip(fav)}
+              >
+                <Icon name="pencil" />
+              </button>
+              <button
+                type="button"
                 className="fav-remove"
-                role="button"
-                tabIndex={-1}
-                title="Remove favorite"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void removeFavoriteChip(fav.path);
-                }}
+                title={`Remove ${fav.label}`}
+                aria-label={`Remove ${fav.label}`}
+                onClick={() => void removeFavoriteChip(fav.path)}
               >
                 ×
-              </span>
-            </button>
+              </button>
+            </div>
           ))}
         </div>
         <button
           type="button"
-          className="fav-add"
-          title={activeIsFavorite ? 'Current path already favorited (Ctrl+D)' : 'Add current path (Ctrl+D)'}
-          disabled={!activePath || activeIsFavorite}
-          onClick={() => void addCurrentFavorite()}
+          className={`fav-add${activeIsFavorite ? ' active' : ''}`}
+          title={activeIsFavorite ? 'Remove current path from favorites' : 'Add current path (Ctrl+D)'}
+          disabled={!activePath}
+          onClick={() => activeIsFavorite ? void removeFavoriteChip(activePath) : void addCurrentFavorite()}
         >
-          <Icon name="plus" /> Add
+          <Icon name={activeIsFavorite ? 'star' : 'plus'} /> {activeIsFavorite ? 'Remove' : 'Add'}
         </button>
         <div className="bar-toggles">
           <label className="check">
@@ -2321,6 +2551,7 @@ function App() {
             onClipboard={setClipboard}
             onToggleMaximize={() => updateWorkspaceLayout(toggleMaximize(workspaceLayout, 'left'))}
             onRefreshPeer={() => refreshSide('right')}
+            askText={askText}
             onRegisterCommands={(c) => {
               leftCommands.current = c;
             }}
@@ -2386,6 +2617,7 @@ function App() {
             onClipboard={setClipboard}
             onToggleMaximize={() => updateWorkspaceLayout(toggleMaximize(workspaceLayout, 'right'))}
             onRefreshPeer={() => refreshSide('left')}
+            askText={askText}
             onRegisterCommands={(c) => {
               rightCommands.current = c;
             }}
@@ -2605,6 +2837,39 @@ function App() {
                 onChange={(e) => updateTerminalPrefs({ customCommand: e.target.value })}
               />
             </label>
+            <label>
+              Updates
+              <select
+                value={updateSettings.checkOnStartup ? 'startup' : 'manual'}
+                disabled={update?.mode === 'disabled'}
+                onChange={(e) => updateUpdateSettings({ checkOnStartup: e.target.value === 'startup' })}
+              >
+                <option value="startup">On startup</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
+            <div className="speech-span-2 update-status-field">
+              <span>Update status</span>
+              <span className="update-summary">{updateSummary(update)}</span>
+            </div>
+            <div className="speech-key-row update-buttons">
+              <button
+                type="button"
+                className="fav-add"
+                disabled={update?.mode === 'disabled' || update?.status === 'checking' || update?.status === 'downloading'}
+                onClick={checkForUpdatesNow}
+              >
+                Check now
+              </button>
+              <button
+                type="button"
+                className="fav-add"
+                disabled={!updateSettings.skippedVersion}
+                onClick={() => updateUpdateSettings({ skippedVersion: '' })}
+              >
+                {updateSettings.skippedVersion ? `Clear skipped ${updateSettings.skippedVersion}` : 'No skipped version'}
+              </button>
+            </div>
             <label className="speech-span-2">
               Server URL
               <input
@@ -2753,6 +3018,22 @@ function App() {
           </>
         ) : null}
       </section>
+
+      {updatePromptOpen && update && (update.status === 'available' || update.status === 'downloading' || update.status === 'ready') ? (
+        <UpdatePrompt
+          state={update}
+          onDownload={() => void api().downloadUpdate().catch((error) => pushLog(error instanceof Error ? error.message : String(error)))}
+          onInstall={() => void api().installUpdate().catch((error) => pushLog(error instanceof Error ? error.message : String(error)))}
+          onOpenRelease={() => void api().openReleasePage().catch((error) => pushLog(error instanceof Error ? error.message : String(error)))}
+          onLater={closeUpdatePrompt}
+          onSkip={() => {
+            updateUpdateSettings({ skippedVersion: update.version });
+            setUpdateAsked(false);
+          }}
+        />
+      ) : null}
+
+      {textDialog}
 
       <footer className="statusbar">
         <div className="cluster" title="Pane item counts (lit = active)">

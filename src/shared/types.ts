@@ -2,6 +2,7 @@ import type { Favorite } from './favorites.js';
 import type { ContextMenuTarget } from './context-menu.js';
 import type { ServerTranscriptionInput } from './speech-server.js';
 import type { TerminalLauncher } from './terminal-launcher.js';
+import type { UpdateState } from './update.js';
 
 export type { Favorite };
 export type { TerminalLauncher, TerminalPrefs } from './terminal-launcher.js';
@@ -86,6 +87,7 @@ export interface FileManApi {
   listLocalDrives(): Promise<string[]>;
   listFavorites(): Promise<Favorite[]>;
   addFavorite(path: string, label?: string): Promise<Favorite[]>;
+  renameFavorite(path: string, label: string): Promise<Favorite[]>;
   removeFavorite(path: string): Promise<Favorite[]>;
   copyText(text: string): Promise<void>;
   openPath(path: string): Promise<void>;
@@ -97,6 +99,12 @@ export interface FileManApi {
   clearSpeechApiKey(): Promise<SpeechApiKeyStatus>;
   /** Server speech: main posts the audio with the stored key; returns the transcript. */
   transcribeViaServer(request: ServerTranscriptionInput): Promise<string>;
+  updateState(): Promise<UpdateState>;
+  checkForUpdates(): Promise<UpdateState>;
+  downloadUpdate(): Promise<UpdateState>;
+  installUpdate(): Promise<void>;
+  openReleasePage(): Promise<void>;
+  onUpdateState(callback: (state: UpdateState) => void): () => void;
   /** Pop up the native right-click menu; picks arrive via onMenuCommand. */
   showContextMenu(target: ContextMenuTarget): Promise<void>;
   onMenuCommand(callback: (command: MenuCommand) => void): () => void;

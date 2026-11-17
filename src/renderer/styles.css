@@ -272,7 +272,6 @@ select {
   color: var(--text);
   font-family: var(--mono);
   font-size: 11px;
-  cursor: pointer;
   white-space: nowrap;
 }
 
@@ -286,19 +285,45 @@ select {
   color: var(--accent);
 }
 
-.fav-chip span:first-child {
+.fav-open {
   overflow: hidden;
   text-overflow: ellipsis;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  min-width: 0;
+  text-align: left;
 }
 
+.fav-rename,
 .fav-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 14px;
   height: 14px;
+  border: 0;
   border-radius: 3px;
+  background: transparent;
   color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.fav-rename svg {
+  width: 10px;
+  height: 10px;
+}
+
+.fav-rename:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.fav-remove {
   font-size: 12px;
   line-height: 1;
 }
@@ -323,7 +348,8 @@ select {
   cursor: pointer;
 }
 
-.fav-add:hover:not(:disabled) {
+.fav-add:hover:not(:disabled),
+.fav-add.active {
   color: var(--accent);
   border-color: var(--accent);
 }
@@ -1448,4 +1474,290 @@ select {
   color: var(--accent-2);
   font-style: normal;
   font-weight: 600;
+}
+
+.update-button,
+.update-actions button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.update-button:hover:not(:disabled),
+.update-actions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  color: var(--accent-2);
+}
+
+.update-button:disabled,
+.update-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.update-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 12, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.update-card {
+  width: min(560px, calc(100vw - 32px));
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.update-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.update-card-head h2 {
+  margin: 2px 0 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.update-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.update-close {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.update-close:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  color: var(--accent-2);
+}
+
+.update-progress {
+  height: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.update-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+
+.update-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--accent-2);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.update-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.update-actions button.primary {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  color: var(--accent-2);
+}
+
+.update-status-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.update-summary {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.update-buttons {
+  align-self: end;
+}
+
+.eyebrow {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.text-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 12, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.text-dialog-card {
+  width: min(420px, calc(100vw - 32px));
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.text-dialog-card h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.text-dialog-message {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-line;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.text-dialog-card input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+.text-dialog-card input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.text-dialog-card input[aria-invalid='true'] {
+  border-color: #f87171;
+}
+
+.text-dialog-error {
+  color: #f87171;
+  font-size: 12px;
+}
+
+.text-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.text-dialog-actions button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.text-dialog-actions button:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  color: var(--accent-2);
+}
+
+.text-dialog-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #04121a;
+}
+
+.text-dialog-actions button.primary:hover {
+  filter: brightness(1.1);
+  color: #04121a;
+}
+
+.entry.drop-target,
+.tile.drop-target,
+.crumb.drop-target {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.listing.drop-target {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.drop-hint {
+  color: var(--accent);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drag-chip {
+  position: absolute;
+  top: 0;
+  left: -1000px;
+  padding: 4px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  z-index: 1000;
 }

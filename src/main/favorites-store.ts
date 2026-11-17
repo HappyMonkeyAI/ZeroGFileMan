@@ -4,8 +4,10 @@ import { join } from 'node:path';
 import { app } from 'electron';
 import {
   defaultLabelForPath,
+  isFavoritePath,
   normalizeFavorites,
   removeFavoritePath,
+  renameFavoritePath,
   upsertFavorite,
   type Favorite
 } from '../shared/favorites.js';
@@ -75,6 +77,17 @@ export async function addFavorite(path: unknown, label?: unknown): Promise<Favor
       : defaultLabelForPath(resolved, home);
   const current = await listFavorites();
   return writeStore(upsertFavorite(current, resolved, labelText));
+}
+
+export async function renameFavorite(path: unknown, label: unknown): Promise<Favorite[]> {
+  const resolved = resolveLocalPath(path);
+  const nextLabel = typeof label === 'string' ? label.trim() : '';
+  if (!nextLabel) throw new Error('Favorite name cannot be empty.');
+  const current = await listFavorites();
+  if (!isFavoritePath(current, resolved)) {
+    throw new Error('Favorite not found.');
+  }
+  return writeStore(renameFavoritePath(current, resolved, nextLabel));
 }
 
 export async function removeFavorite(path: unknown): Promise<Favorite[]> {

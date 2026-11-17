@@ -30,6 +30,7 @@ export type MenuCommand =
   | 'go:add-favorite'
   | 'voice:navigate'
   | 'voice:action'
+  | 'help:check-updates'
   | 'help:about';
 
 function send(win: BrowserWindow | undefined, command: MenuCommand): void {
@@ -210,6 +211,11 @@ export function installApplicationMenu(getWindow: () => BrowserWindow | undefine
     {
       label: 'Help',
       submenu: [
+        {
+          label: 'Check for Updates',
+          click: () => send(getWindow(), 'help:check-updates')
+        },
+        { type: 'separator' },
         {
           label: 'About ZeroG FileMan',
           click: () => send(getWindow(), 'help:about')
