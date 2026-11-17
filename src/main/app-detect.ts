@@ -10,6 +10,7 @@ import {
   packageAppName,
   packageAssociations,
   pickPortableExe,
+  zerogAppManifest,
   type AppLaunch,
   type DetectedApp
 } from '../shared/file-apps.js';
@@ -67,24 +68,48 @@ export async function detectLocalApps(rootRaw: unknown): Promise<DetectedApp[]> 
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
     const projectDir = join(root, entry.name);
+    let detected = false;
     try {
       const pkg = JSON.parse(await readFile(join(projectDir, 'package.json'), 'utf8')) as Record<string, unknown>;
       const extensions = packageAssociations(pkg);
-      if (!extensions.length) continue;
-      const name = packageAppName(pkg) || entry.name;
-      const found = await launchForProject(projectDir, name, pkg);
-      if (!found) continue;
+      if (extensions.length) {
+        const name = packageAppName(pkg) || entry.name;
+        const found = await launchForProject(projectDir, name, pkg);
+        if (found) {
+          apps.push({
+            id: `detected:${entry.name}`,
+            name,
+            version: typeof pkg.version === 'string' ? pkg.version : '',
+            extensions,
+            launch: found.launch,
+            source: found.source,
+            projectDir
+          });
+          detected = true;
+        }
+      }
+    } catch {
+      /* no package.json — try a native manifest below */
+    }
+    if (detected) continue;
+    try {
+      const manifest = zerogAppManifest(JSON.parse(await readFile(join(projectDir, 'zerogapp.json'), 'utf8')));
+      if (!manifest) continue;
+      const command = isAbsolute(manifest.launch.command)
+        ? manifest.launch.command
+        : join(projectDir, manifest.launch.command);
+      if (!existsSync(command)) continue;
       apps.push({
         id: `detected:${entry.name}`,
-        name,
-        version: typeof pkg.version === 'string' ? pkg.version : '',
-        extensions,
-        launch: found.launch,
-        source: found.source,
+        name: manifest.name,
+        version: manifest.version,
+        extensions: manifest.extensions,
+        launch: { ...manifest.launch, command },
+        source: 'manifest',
         projectDir
       });
     } catch {
-      /* not an app project */
+      /* not a manifest project */
     }
   }
   return apps.sort((a, b) => a.name.localeCompare(b.name));

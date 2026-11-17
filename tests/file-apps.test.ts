@@ -17,6 +17,7 @@ import {
   pickPortableExe,
   resolveAppArgs,
   resolveDefaultApp,
+  zerogAppManifest,
   type CustomApp,
   type DetectedApp,
   type FileAppPrefs
@@ -249,5 +250,49 @@ describe('appCommandProblem', () => {
     expect(appCommandProblem('/usr/bin/markdown-viewer', 'linux')).toBeNull();
     expect(appCommandProblem('/Applications/Viewer.app/Contents/MacOS/Viewer', 'darwin')).toBeNull();
     expect(appCommandProblem('', 'linux')).toBe('App executable not found.');
+  });
+});
+
+describe('zerogAppManifest', () => {
+  const valid = {
+    name: 'ZeroG Play',
+    version: '0.1.0',
+    extensions: ['mp3', '.FLAC'],
+    launch: { command: 'target/release/zerogplay.exe', args: ['{file}'] }
+  };
+
+  it('parses a valid manifest and normalizes extensions', () => {
+    const manifest = zerogAppManifest(valid);
+    expect(manifest).not.toBeNull();
+    expect(manifest!.name).toBe('ZeroG Play');
+    expect(manifest!.extensions).toEqual(['.mp3', '.flac']);
+    expect(manifest!.launch).toEqual({ command: 'target/release/zerogplay.exe', args: ['{file}'] });
+  });
+
+  it('defaults missing args to {file}', () => {
+    const manifest = zerogAppManifest({ ...valid, launch: { command: 'app.exe' } });
+    expect(manifest!.launch.args).toEqual(['{file}']);
+  });
+
+  it('keeps an optional cwd', () => {
+    const manifest = zerogAppManifest({ ...valid, launch: { command: 'app.exe', cwd: 'C:/apps' } });
+    expect(manifest!.launch.cwd).toBe('C:/apps');
+  });
+
+  it('rejects missing name, extensions, launch, or command', () => {
+    expect(zerogAppManifest(null)).toBeNull();
+    expect(zerogAppManifest({ ...valid, name: '' })).toBeNull();
+    expect(zerogAppManifest({ ...valid, extensions: [] })).toBeNull();
+    expect(zerogAppManifest({ ...valid, launch: undefined })).toBeNull();
+    expect(zerogAppManifest({ ...valid, launch: { command: '' } })).toBeNull();
+    expect(zerogAppManifest({ ...valid, name: 'x'.repeat(81) })).toBeNull();
+  });
+
+  it('filters unsafe or oversized args', () => {
+    const manifest = zerogAppManifest({
+      ...valid,
+      launch: { command: 'app.exe', args: ['{file}', 42, 'bad\0arg', 'ok'] }
+    });
+    expect(manifest!.launch.args).toEqual(['{file}', 'ok']);
   });
 });

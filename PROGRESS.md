@@ -33,6 +33,7 @@ Open check: builtin Whisper model download under the narrowed CSP `connect-src` 
 - In-app name dialog replaces `window.prompt` (Electron never implements it): New Folder, New File type/name, Rename (F2) and favorite naming now work in both panes; inline validation, Esc/Cancel aborts, new folders land selected
 - Explorer-style drag-drop inside and between panes: drag = move, Ctrl = copy, Shift = force move, cross-drive defaults to copy; targets are folder rows/tiles, pane background, ".." and breadcrumbs; whole-selection drag; both panes refresh and the transcript logs each op; same-folder moves and drops into a folder's own subtree are no-ops
 - Name dialog + drag-drop rules covered by 24 new tests (188 total); `npm run ci` passes; verified in a real hidden Electron window against a temp filesystem: 14/14 UI checks (dialog in the right pane, invalid-name error, Esc cancel, F2 rename, cross-pane move, Ctrl copy, folder-row drop, same-folder no-op)
+- Native-app detection: projects without Electron associations can declare a `zerogapp.json` manifest (`name`, `version`, `extensions`, `launch.command`/`args`/`cwd`); relative commands resolve against the project dir, missing executables are skipped, `package.json` associations still win; the Rust sister apps ZeroG Edit / ZeroG Play use this (8 new tests; 225 total)
 
 ## Next
 
