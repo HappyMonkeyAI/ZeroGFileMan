@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { app } from 'electron';
 import {
   defaultLabelForPath,
+  isFavoritePath,
   normalizeFavorites,
   removeFavoritePath,
   renameFavoritePath,
@@ -83,7 +84,7 @@ export async function renameFavorite(path: unknown, label: unknown): Promise<Fav
   const nextLabel = typeof label === 'string' ? label.trim() : '';
   if (!nextLabel) throw new Error('Favorite name cannot be empty.');
   const current = await listFavorites();
-  if (!current.some((favorite) => favorite.path.toLowerCase() === resolved.toLowerCase())) {
+  if (!isFavoritePath(current, resolved)) {
     throw new Error('Favorite not found.');
   }
   return writeStore(renameFavoritePath(current, resolved, nextLabel));

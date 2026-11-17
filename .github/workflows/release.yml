@@ -110,7 +110,7 @@ jobs:
           shopt -s nullglob
           assets=(release-assets/*)
           release_flags=()
-          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then release_flags+=(--prerelease); fi
+          if [[ "${GITHUB_REF_NAME}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+- ]]; then release_flags+=(--prerelease); fi
           gh release create "${GITHUB_REF_NAME}" \
             "${assets[@]}" \
             --verify-tag \
