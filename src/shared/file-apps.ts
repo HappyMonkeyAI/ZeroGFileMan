@@ -47,7 +47,7 @@ export type DetectedApp = {
   version: string;
   extensions: string[];
   launch: AppLaunch;
-  source: 'unpacked' | 'portable' | 'dev';
+  source: 'unpacked' | 'portable' | 'dev' | 'manifest';
   projectDir: string;
 };
 
@@ -247,6 +247,43 @@ export function packageAppName(pkg: unknown): string {
     build && typeof build === 'object' ? (build as Record<string, unknown>).productName : undefined;
   if (typeof productName === 'string' && productName.trim()) return productName.trim();
   return typeof source.name === 'string' ? source.name.trim() : '';
+}
+
+/** A native (non-Electron) app's zerogapp.json manifest, validated. */
+export type ZerogAppManifest = {
+  name: string;
+  version: string;
+  extensions: string[];
+  launch: AppLaunch;
+};
+
+export function zerogAppManifest(raw: unknown): ZerogAppManifest | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as Record<string, unknown>;
+  const name = typeof source.name === 'string' ? source.name.trim() : '';
+  if (!name || name.length > 80) return null;
+  const version = typeof source.version === 'string' ? source.version.trim() : '';
+  const extensions = parseExtensionList(
+    Array.isArray(source.extensions) ? source.extensions.join(',') : source.extensions
+  );
+  if (!extensions.length) return null;
+  const launchRaw = source.launch;
+  if (!launchRaw || typeof launchRaw !== 'object') return null;
+  const launchSource = launchRaw as Record<string, unknown>;
+  const command = typeof launchSource.command === 'string' ? launchSource.command.trim() : '';
+  if (!command || command.length > 2048) return null;
+  const args = Array.isArray(launchSource.args)
+    ? launchSource.args
+        .filter((arg): arg is string => typeof arg === 'string' && arg.length <= 2048 && !/[\0\r\n]/.test(arg))
+        .slice(0, 32)
+    : [];
+  const cwd = typeof launchSource.cwd === 'string' && launchSource.cwd.trim() ? launchSource.cwd.trim() : undefined;
+  return {
+    name,
+    version,
+    extensions,
+    launch: { command, args: args.length ? args : ['{file}'], ...(cwd ? { cwd } : {}) }
+  };
 }
 
 /** Best launchable exe among build artifacts: portable over installer-free, newest version first. */
